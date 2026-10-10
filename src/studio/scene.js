@@ -294,3 +294,24 @@ const scHeart3d = (src, T, grid) => {
 };
 SC_SCENES.heart = { label: 'A red 3D heart, turning and beating', pixels: scHeart3d, ramp: 'soft' };
 
+class PiixSceneElement extends PrintStage {
+  constructor() { super(); this._aspect = 16 / 9; this._paper = '#07060b'; this._edges = true; }
+  get scene() { const s = this.getAttribute('scene'); return SC_SCENES[s] ? s : 'kiss'; }
+  _label() { return SC_SCENES[this.scene].label; }
+  _setup() {
+    const { cols, rows } = this._grid;
+    this._ramp = SC_SCENES[this.scene].ramp ? PRINT_RAMPS[SC_SCENES[this.scene].ramp] : null;
+    this._hi = document.createElement('canvas'); this._hi.width = cols * 2; this._hi.height = rows * 2;
+    this._stillAt = { kiss: 5, heartbreak: 2.2, umbrella: 5, stargaze: 4.4, alone: 7.5, hug: 3.4, heart: .1, campfire: 3 }[this.scene];
+  }
+  _paint(src, T) {
+    const sc = SC_SCENES[this.scene];
+    if (sc.pixels) return sc.pixels(src, T, this._grid);
+    const hi = this._hi, g = hi.getContext('2d');
+    g.setTransform(hi.width / 1600, 0, 0, hi.height / 900, 0, 0); g.globalAlpha = 1; g.clearRect(0, 0, 1600, 900);
+    sc.draw(g, T);
+    const s = src.getContext('2d'); s.imageSmoothingEnabled = true; s.clearRect(0, 0, src.width, src.height); s.drawImage(hi, 0, 0, src.width, src.height);
+  }
+}
+define('piix-scene', PiixSceneElement);
+ELEMENTS.scene = 'piix-scene';
