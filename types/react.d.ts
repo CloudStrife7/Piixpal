@@ -1,6 +1,6 @@
 /* Types for piixpal/react */
 import type { FC, HTMLAttributes } from 'react';
-import type { PiixPalAttributes, PiixSpriteAttributes, PiixTypeAttributes, PiixCrowdAttributes, PiixWeatherAttributes, PiixStickersAttributes, PiixAvatarAttributes, PiixVoxelAttributes, PiixCardAttributes, PiixPlanetAttributes, PiixGlobeAttributes, PiixHoloAttributes, PiixRoomAttributes } from './piixpal';
+import type { PiixPalAttributes, PiixSpriteAttributes, PiixTypeAttributes, PiixCrowdAttributes, PiixWeatherAttributes, PiixStickersAttributes, PiixAvatarAttributes, PiixVoxelAttributes, PiixCardAttributes, PiixPlanetAttributes, PiixGlobeAttributes, PiixHoloAttributes, PiixRoomAttributes, PiixBackdropAttributes, PiixSceneAttributes } from './piixpal';
 type Extra = Omit<HTMLAttributes<HTMLElement>, 'color'> & Record<string, unknown>;
 export const PiixPal: FC<PiixPalAttributes & Extra>;
 export const PiixSprite: FC<PiixSpriteAttributes & Extra>;
@@ -15,4 +15,6 @@ export const PiixPlanet: FC<PiixPlanetAttributes & Extra>;
 export const PiixGlobe: FC<PiixGlobeAttributes & Extra>;
 export const PiixHolo: FC<PiixHoloAttributes & Extra>;
 export const PiixRoom: FC<PiixRoomAttributes & Extra>;
+export const PiixBackdrop: FC<PiixBackdropAttributes & Extra>;
+export const PiixScene: FC<PiixSceneAttributes & Extra>;
 export function loadPiixpal(): Promise<unknown>;
