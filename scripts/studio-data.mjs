@@ -53,3 +53,24 @@ export const STUDIO = [
     code: '<piix-room scene="desk"></piix-room>\n<piix-room scene="pond"></piix-room>\n<piix-room scene="night"></piix-room>'
   }
 ];
+
+// ASCII & dither: moving pictures drawn as type, dots and dither, built on src/elements/print.js.
+export const BACKDROPS = ['aurora', 'sunburst', 'plasma', 'rain', 'stars', 'clouds', 'tunnel', 'synthwave', 'fire', 'waves'];
+export const SCENES = [['kiss', 'a kiss, hearts rising'], ['heartbreak', 'a heart cracks in the rain'], ['umbrella', 'a walk under a red umbrella'], ['stargaze', 'shooting stars, together'], ['alone', 'a rain cloud, then a little heart'], ['hug', 'running into a hug'], ['heart', 'a 3D heart, beating'], ['campfire', 'sparks into the stars']];
+const PLOOKS = 'ascii | dither | halftone | pixel';
+export const PRINT = [
+  {
+    id: 'backdrop', tag: 'piix-backdrop', accent: 'var(--violet)', tall: true,
+    desc: 'Animated pixel backgrounds for sections: an aurora, a sunburst, plasma, digital rain, a starfield warp, clouds, a tunnel, a synthwave grid, pixel fire and moonlit waves, drawn as ASCII, ordered dither, halftone dots or chunky pixels. The pointer stirs them. With fill it sits behind the rest of the element it is in, so your content stays on top.',
+    attrs: [['kind', BACKDROPS.join(' | ') + ' (default aurora)'], ['look', PLOOKS + ' (default: the kind\'s own)'], ['palette', 'lime, aurora, sunset, ocean, candy, fire, gameboy, paper, mono, or your own colours dark to light: "#000,#f0f,#fff"'], ['ink', 'draw it all in one colour'], ['paper', 'the background colour'], ['cell', 'size of a character, dot or block in px'], ['ramp', 'ascii characters: classic, soft, blocks, binary, dots, hearts, code, or your own'], ['edges', '"off", or a number: how sharp a change becomes a / | \\ line'], ['speed', '1 is normal, 0 holds still'], ['height', 'px when not filling (default 320)'], ['fill', 'sit behind the content of its parent']],
+    hab: '<div class="h3d" style="padding:0"><piix-backdrop kind="synthwave" fill></piix-backdrop><p class="pd-over">Your section,<br>on top.</p></div>',
+    code: '<section>\n  <piix-backdrop kind="aurora" fill></piix-backdrop>\n  <h2>Your content stays on top</h2>\n</section>\n\n<piix-backdrop kind="rain" height="240"></piix-backdrop>'
+  },
+  {
+    id: 'scene', tag: 'piix-scene', accent: 'var(--coral)', tall: true,
+    desc: 'Little animated films in ASCII: a couple kissing as hearts float up, a heartbroken man on a bench in the rain as his heart cracks in two, a walk under a red umbrella, two people watching shooting stars, someone under their own rain cloud until a little heart finds them, a hug, a beating 3D heart and a campfire. Every one also plays in dither, halftone or pixels, and in one ink for a green-screen terminal look.',
+    attrs: [['scene', SCENES.map(s => s[0]).join(' | ') + ' (default kiss)'], ['look', PLOOKS + ' (default ascii)'], ['ink', 'one colour for everything, like ink="#7dff7a"'], ['paper', 'the background colour (default #07060b)'], ['cell', 'size of a character, dot or block in px'], ['ramp', 'ascii characters: classic, soft, blocks, binary, dots, hearts, code, or your own'], ['edges', '"off", or a number: how sharp a change becomes a / | \\ line'], ['speed', '1 is normal'], ['size', 'width in px (it is 16:9); by default it fills its container']],
+    hab: '<div class="h3d" style="padding:0"><piix-scene scene="kiss" look="dither" style="width:100%"></piix-scene></div>',
+    code: '<piix-scene scene="kiss"></piix-scene>\n<piix-scene scene="heartbreak" ink="#7dff7a"></piix-scene>\n<piix-scene scene="heart" look="dither"></piix-scene>'
+  }
+];
