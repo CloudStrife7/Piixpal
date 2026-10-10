@@ -14,7 +14,7 @@ const SITE = process.env.PIIX_SITE || 'https://piixpal.dvkk.dev';
 const CDN = `https://cdn.jsdelivr.net/npm/piixpal@${pkg.version}/`;
 const { PALS } = await import('./docs.mjs');
 const { POWERS } = await import('./powers-data.mjs');
-const { STUDIO } = await import('./studio-data.mjs');
+const { STUDIO, PRINT } = await import('./studio-data.mjs');
 
 /* one-line descriptions, shared with the docs */
 const docs = readFileSync(join(root, 'scripts/docs.mjs'), 'utf8');
@@ -98,7 +98,7 @@ for (const p of POWERS) {
   if (p.kind === 'element') add(p.id, Pascal(p.id), BRIEF[p.id] || first(p.desc), p.tag, null, p.id);
   else add(p.id, Pascal(p.id), BRIEF[p.id] || first(p.desc), 'piix-pal', ['pal', p.id], p.id);
 }
-for (const x of STUDIO) add(x.id, Pascal(x.id), BRIEF[x.id] || first(x.desc), x.tag, null, x.id);
+for (const x of [...STUDIO, ...PRINT]) add(x.id, Pascal(x.id), BRIEF[x.id] || first(x.desc), x.tag, null, x.id);
 for (const s of sprites) if (!items.some(i => i.name === s.name)) add(s.name, Pascal(s.name), s.tag, 'piix-sprite', ['name', s.name], s.name);
 add('crowd', 'Crowd', 'Hundreds of tiny agents on one canvas: they wander, swarm your cursor, or spell a word.', 'piix-crowd', null, 'core');
 add('pixel-type', 'PixelType', 'Any font as chunky extruded pixel blocks that pals can walk on.', 'piix-type', null, 'core');
