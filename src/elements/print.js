@@ -34,3 +34,22 @@ const printShade = (pal, v, out, i) => {
   out[i] = pal[a][0] + (pal[b][0] - pal[a][0]) * k; out[i + 1] = pal[a][1] + (pal[b][1] - pal[a][1]) * k; out[i + 2] = pal[a][2] + (pal[b][2] - pal[a][2]) * k; out[i + 3] = 255;
 };
 
+/* glyph atlases: each ramp drawn once in white, per cell size */
+const PRINT_ATLAS = {};
+const printAtlas = (ramp, cw, ch) => {
+  const key = ramp + cw + 'x' + ch;
+  if (PRINT_ATLAS[key]) return PRINT_ATLAS[key];
+  const c = document.createElement('canvas'); c.width = Math.ceil(cw * ramp.length); c.height = Math.ceil(ch);
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = `600 ${ch * .92}px ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace`;
+  [...ramp].forEach((ch2, i) => x.fillText(ch2, cw * i + cw / 2, ch / 2 + ch * .04));
+  return (PRINT_ATLAS[key] = c);
+};
+const PRINT_BUF = {};
+const printBuf = (k, w, h) => { let c = PRINT_BUF[k]; if (!c) c = PRINT_BUF[k] = document.createElement('canvas'); if (c.width !== w || c.height !== h) { c.width = w; c.height = h; } return c; };
+/* how many cells fit: characters are taller than wide, dots and blocks are square */
+const printGrid = (look, w, h, cell) => {
+  const cw = cell, ch = look === 'ascii' ? Math.round(cell * 1.7) : cell;
+  return { cw, ch, cols: Math.max(4, Math.ceil(w / cw)), rows: Math.max(3, Math.ceil(h / ch)) };
+};
+
