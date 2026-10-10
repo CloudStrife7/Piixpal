@@ -436,6 +436,18 @@
       "description": "A little isometric voxel diorama with a pal living in it."
     },
     {
+      "name": "backdrop",
+      "type": "registry:component",
+      "title": "Backdrop",
+      "description": "Animated ASCII, dither, halftone and pixel backgrounds for your sections."
+    },
+    {
+      "name": "scene",
+      "type": "registry:component",
+      "title": "Scene",
+      "description": "Little animated films in ASCII: a kiss, a heartbreak, a hug, a beating 3D heart."
+    },
+    {
       "name": "alien",
       "type": "registry:component",
       "title": "Alien",

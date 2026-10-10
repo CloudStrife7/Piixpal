@@ -1,0 +1,18 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "scene",
+  "type": "registry:component",
+  "title": "Scene",
+  "description": "Little animated films in ASCII: a kiss, a heartbreak, a hug, a beating 3D heart.",
+  "registryDependencies": [
+    "https://piixpal.vercel.app/r/piixpal.json"
+  ],
+  "files": [
+    {
+      "path": "registry/piixpal/scene.tsx",
+      "type": "registry:component",
+      "target": "components/piixpal/scene.tsx",
+      "content": "\"use client\";\n/* Scene, from the Piixpal shadcn registry. Options: https://piixpal.dvkk.dev/components/ */\nimport * as React from \"react\";\nimport { loadPiixpal, piixAttrs, type PiixProps } from \"@/lib/piixpal\";\n\nexport function Scene(props: PiixProps) {\n  React.useEffect(() => { loadPiixpal(\"scene\"); }, []);\n  return React.createElement(\"piix-scene\", piixAttrs(props));\n}\n\nexport default Scene;\n"
+    }
+  ]
+}

@@ -87,6 +87,8 @@
 - Globe: A pal in a snow globe. Shake it. Tag: <piix-globe>. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/globe.json
 - Holo: A pal projected as a flickering hologram. Tag: <piix-holo>. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/holo.json
 - Room: A little isometric voxel diorama with a pal living in it. Tag: <piix-room>. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/room.json
+- Backdrop: Animated ASCII, dither, halftone and pixel backgrounds for your sections. Tag: <piix-backdrop>. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/backdrop.json
+- Scene: Little animated films in ASCII: a kiss, a heartbreak, a hug, a beating 3D heart. Tag: <piix-scene>. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/scene.json
 - Alien: A tiny visitor with three eyes and one antenna. Has questions about your CSS. Tag: <piix-sprite name="alien">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/alien.json
 - Avocado: Half an avocado, proudly showing off its pit. Ripe for exactly one day. Tag: <piix-sprite name="avocado">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/avocado.json
 - Battery: A battery that is always charging and always at one percent. Brave. Tag: <piix-sprite name="battery">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/battery.json
