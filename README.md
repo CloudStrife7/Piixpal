@@ -6,7 +6,7 @@
 
 <p><b>Tiny pixel creatures that live on your website.</b></p>
 
-<p>They crawl on your headings, nap on your paragraphs, perch on your buttons, deliver your toasts<br>and turn your page into a game. 124 drop-in web components. Zero dependencies.</p>
+<p>They crawl on your headings, nap on your paragraphs, perch on your buttons, deliver your toasts<br>and turn your page into a game. 126 drop-in web components. Zero dependencies.</p>
 
 <p>
 <a href="https://www.npmjs.com/package/piixpal"><img src="https://img.shields.io/npm/v/piixpal?color=c6f432&labelColor=17121f&style=flat-square" alt="npm version"></a>
@@ -21,6 +21,7 @@
 <a href="https://piixpal.dvkk.dev/components/"><b>Components</b></a> ·
 <a href="https://piixpal.dvkk.dev/components/powers"><b>Superpowers</b></a> ·
 <a href="https://piixpal.dvkk.dev/components/3d"><b>3D</b></a> ·
+<a href="https://piixpal.dvkk.dev/components/ascii"><b>ASCII</b></a> ·
 <a href="https://piixpal.dvkk.dev/components/install"><b>Install</b></a> ·
 <a href="https://piixpal.dvkk.dev/components/builder"><b>Builder</b></a>
 </p>
@@ -114,6 +115,7 @@ The [Builder](https://piixpal.dvkk.dev/components/builder) writes the no-markup 
 | --- | --- | --- |
 | **42 pals** | characters that live on your page: crawlers, bouncers, peekers, toys you can throw, whole crews in one tag | [browse →](https://piixpal.dvkk.dev/components/pals) |
 | **6 in 3D** | pals as real 3D models: spinning toys in eight looks (glossy to ASCII), holo trading cards, a voxel planet, a snow globe, a hologram, voxel dioramas | [browse →](https://piixpal.dvkk.dev/components/3d) |
+| **ASCII &amp; dither** | animated ASCII, dither, halftone and pixel backdrops (aurora, rain, synthwave, fire…) and little ASCII films: a kiss, a heartbreak, a hug, a beating 3D heart | [browse →](https://piixpal.dvkk.dev/components/ascii) |
 | **23 superpowers** | pals that step out of the page, do real interface jobs, or turn your site into a game | [browse →](https://piixpal.dvkk.dev/components/powers) |
 | **49 sprites** | inline characters, 30 small pixel ones and 19 big 3D ones, in six render styles | [browse →](https://piixpal.dvkk.dev/components/sprites) |
 | **Crowd** | hundreds of tiny agents on one canvas: they wander, swarm or spell a word | [try →](https://piixpal.dvkk.dev/components/crowd) |
