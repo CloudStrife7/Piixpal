@@ -133,3 +133,67 @@ const printPaint = (g, src, o) => {
   g.restore();
 };
 
+/* ---------- the stage backdrops and scenes stand on ----------
+ * fits its box (or the size you give it), paints only while on screen, and holds a still
+ * frame for reduced motion */
+class PrintStage extends HTMLElement {
+  static get observedAttributes() { return ['kind', 'scene', 'look', 'cell', 'size', 'height', 'palette', 'ink', 'paper', 'ramp', 'speed', 'fill', 'edges']; }
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this._tick = this._tick.bind(this); this._vis = true; this._t0 = now();
+    this._pt = { x: .5, y: .5, on: false };
+  }
+  connectedCallback() {
+    this._build();
+    this._io = new IntersectionObserver(es => { this._vis = es[es.length - 1].isIntersecting; }, { rootMargin: '80px' });
+    this._io.observe(this);
+    this._ro = new ResizeObserver(() => this._fit()); this._ro.observe(this);
+    sub(this._tick);
+  }
+  disconnectedCallback() { unsub(this._tick); if (this._io) this._io.disconnect(); if (this._ro) this._ro.disconnect(); }
+  attributeChangedCallback(n, a, b) { if (a !== b && this._cv) this._build(); }
+  get look() { const l = this.getAttribute('look'); return PRINT_LOOKS.includes(l) ? l : this._defLook || 'ascii'; }
+  _build() {
+    const fill = this.hasAttribute('fill');
+    if (fill && this.parentElement) {
+      /* sit behind the content of the section it's in */
+      const p = this.parentElement, cs = getComputedStyle(p);
+      if (cs.position === 'static') p.style.position = 'relative';
+      p.style.isolation = 'isolate';
+    }
+    const size = +this.getAttribute('size'), hgt = +this.getAttribute('height');
+    this.shadowRoot.innerHTML = `<style>:host{display:block;position:${fill ? 'absolute' : 'relative'};${fill ? 'inset:0;z-index:-1;pointer-events:none;' : ''}${size ? `width:${size}px;` : ''}${!fill ? (hgt ? `height:${hgt}px;` : this._aspect ? `aspect-ratio:${this._aspect};` : 'height:320px;') : ''}overflow:hidden;line-height:0}
+:host([hidden]){display:none}canvas{display:block;width:100%;height:100%}</style><canvas part="canvas"></canvas>`;
+    this._cv = this.shadowRoot.querySelector('canvas');
+    this._g = this._cv.getContext('2d');
+    if (!this.hasAttribute('aria-label')) { this.setAttribute('role', 'img'); this.setAttribute('aria-label', this._label ? this._label() : 'An animated pixel picture'); }
+    else if (fill) this.setAttribute('aria-hidden', 'true');
+    this._fit();
+  }
+  _fit() {
+    if (!this._cv) return;
+    const r = this.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+    const w = Math.max(40, Math.round(r.width)), h = Math.max(30, Math.round(r.height));
+    this._cv.width = Math.round(w * dpr); this._cv.height = Math.round(h * dpr);
+    const cell = (+this.getAttribute('cell') || this._defCell || (this.look === 'dither' ? 3 : this.look === 'pixel' ? 6 : this.look === 'halftone' ? 9 : 7)) * dpr;
+    this._grid = printGrid(this.look, this._cv.width, this._cv.height, Math.max(2, Math.round(cell)));
+    this._src = document.createElement('canvas'); this._src.width = this._grid.cols; this._src.height = this._grid.rows;
+    this._still = false;
+    if (this._setup) this._setup();
+  }
+  _tick(dt) {
+    if (!this._vis || !this._grid) return;
+    const R = reduced();
+    if (R && this._still) return;
+    const r = this.getBoundingClientRect();
+    this._pt.on = ptr.seen && ptr.cx >= r.left && ptr.cx <= r.right && ptr.cy >= r.top && ptr.cy <= r.bottom;
+    if (this._pt.on) { this._pt.x = (ptr.cx - r.left) / r.width; this._pt.y = (ptr.cy - r.top) / r.height; }
+    const speed = this.hasAttribute('speed') ? +this.getAttribute('speed') : 1;
+    const T = R ? (this._stillAt || 4) : (now() - this._t0) / 1000 * speed;
+    this._paint(this._src, T);
+    printPaint(this._g, this._src, { look: this.look, cw: this._grid.cw, ch: this._grid.ch, ramp: PRINT_RAMPS[this.getAttribute('ramp')] || this.getAttribute('ramp') || this._ramp, ink: this.getAttribute('ink'), paper: this.getAttribute('paper') || this._paper, scramble: this._scramble && this.look === 'ascii', edges: this.hasAttribute('edges') ? (this.getAttribute('edges') === 'off' ? false : +this.getAttribute('edges') || true) : this._edges, t: T });
+    this._still = R;
+  }
+}
+Piixpal.print = { looks: PRINT_LOOKS, ramps: PRINT_RAMPS, palettes: PRINT_PALETTES, paint: printPaint, grid: printGrid };
