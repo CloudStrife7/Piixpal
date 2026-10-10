@@ -113,3 +113,14 @@ const voxDraw = (g, m, o) => {
   }
 };
 
+/* scratch canvases, kept per size */
+const VOX_BUF = {};
+const voxBuf = (key, w, h) => {
+  let c = VOX_BUF[key];
+  if (!c) c = VOX_BUF[key] = document.createElement('canvas');
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  return c;
+};
+const VOX_BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => v / 16 - .5);
+const VOX_RAMP = ' .:-=+*#%@';
+
