@@ -224,7 +224,7 @@ const sidebar = active => {
     ${group('pals', 'Pals', 'pals.html', PALS.length, [['Characters', kinds.pal.map(p => item('pals.html#' + p.id, p.id, p.accent))], ['Interactions', kinds.play.map(p => item('pals.html#' + p.id, p.id, p.accent))], ['Toys', kinds.toy.map(p => item('pals.html#' + p.id, p.id, p.accent))], ['Groups', kinds.group.map(p => item('pals.html#' + p.id, p.id, p.accent))]])}
     ${group('powers', 'Superpowers', 'powers.html', POWERS.length, FAMILIES.map(([id, name]) => [name, POWERS.filter(p => p.fam === id).map(p => item('powers.html#' + p.id, p.id, p.accent))]))}
     ${group('studio', '3D', '3d.html', STUDIO.length, [['Pals in 3D', STUDIO.map(x => item('3d.html#' + x.id, x.id, x.accent))]])}
-    ${group('print', 'ASCII & dither', 'ascii.html', PRINT.length, [['Components', PRINT.map(x => item('ascii.html#' + x.id, x.id, x.accent))], ['Backdrops', BACKDROPS.map(k => item('ascii.html#bd-' + k, k, 'var(--violet)'))], ['Scenes', SCENES.map(([k]) => item('ascii.html#sc-' + k, k, 'var(--coral)'))]])}
+    ${group('print', 'ASCII & dither', 'ascii.html', SCENES.length + BACKDROPS.length, [['Scenes', SCENES.map(([k]) => item('ascii.html#sc-' + k, k, 'var(--coral)'))], ['Backdrops', BACKDROPS.map(([k]) => item('ascii.html#bd-' + k, k, 'var(--violet)'))]])}
     <nav class="side-start">${link('crowd.html', 'Crowd', 'crowd')}${link('type.html', 'Pixel type', 'type')}</nav>
     <p class="side-none" hidden>Nothing by that name.</p>
   </aside>`;
@@ -520,17 +520,36 @@ const studioBody = `<header class="doc-head">
 ${family('in-3d', 'Pals in 3D', STUDIO, studioSection)}`;
 
 /* ---------- ASCII & dither ---------- */
-const tile = (id, label, el, code) => `<figure class="pg-tile" id="${id}"><div class="pg-art">${el}</div><figcaption><b>${esc(label)}</b><button class="copy" type="button" data-copy="${esc(code)}">${esc(code)}</button></figcaption></figure>`;
+/* each scene and backdrop gets a big live stage, buttons to try the looks, and its code */
+const looksBar = cur => `<div class="show-looks" role="group" aria-label="Look">${['ascii', 'dither', 'halftone', 'pixel'].map(l => `<button type="button" data-look="${l}" aria-pressed="${l === cur}">${l}</button>`).join('')}</div>`;
+const show = ({ id, name, accent, tag, brief: b, stage, look, code }) => `
+<section class="cmp show" id="${id}" aria-labelledby="${id}-h" style="--accent:${accent}">
+  <header class="cmp-head"><h2 id="${id}-h">${esc(name)}</h2><code class="cmp-tag">${esc(tag)}</code><p>${esc(b)}</p></header>
+  <div class="show-stage">${looksBar(look)}${stage}</div>
+  ${code}
+</section>`;
+const BD_LOOK = { aurora: 'dither', sunburst: 'halftone', clouds: 'halftone', waves: 'halftone', synthwave: 'dither', fire: 'pixel' };
+const sceneShow = ([k, d, look]) => show({
+  id: 'sc-' + k, name: title(k), accent: 'var(--coral)', tag: `<piix-scene scene="${k}">`, brief: d, look,
+  stage: `<piix-scene scene="${k}" look="${look}"></piix-scene>`,
+  code: installTabs('scene', 'element', `<piix-scene scene="${k}"${look !== 'ascii' ? ` look="${look}"` : ''}></piix-scene>`, 'main', 'scene=' + k)
+});
+const backdropShow = ([k, d]) => show({
+  id: 'bd-' + k, name: title(k), accent: 'var(--violet)', tag: `<piix-backdrop kind="${k}">`, brief: d, look: BD_LOOK[k] || 'ascii',
+  stage: `<div class="show-bd"><piix-backdrop kind="${k}" fill></piix-backdrop><div class="show-demo"><h3>Your headline here</h3><p>Your content sits on top, the backdrop moves behind it.</p><span class="show-btn">Get started</span></div></div>`,
+  code: installTabs('backdrop', 'element', `<section>\n  <piix-backdrop kind="${k}" fill></piix-backdrop>\n  <h2>Your content stays on top</h2>\n</section>`, 'main', 'kind=' + k)
+});
 const printBody = `<header class="doc-head">
   <div class="crumbs"><a href="./">Components</a><span>/</span><span>ASCII &amp; dither</span></div>
   <h1>ASCII &amp; dither</h1>
-  <p>Moving pictures drawn in type, dots and dither: backgrounds for your sections, and little films with feeling. Everything here plays in four looks (ascii, dither, halftone, pixel), in full colour or one ink.</p>
+  <p>Moving pictures drawn in type, dots and dither: little films with feeling, and backgrounds for your sections. Every one plays live below. Try the four looks on each, then copy the tag.</p>
+  ${jump([['scenes', 'Scenes', SCENES.length], ['backdrops', 'Backdrops', BACKDROPS.length], ['options', 'All options', PRINT.length]])}
 </header>
-${family('print-cmp', 'Components', PRINT, studioSection)}
-<h2 class="fam-h" id="backdrops">Backdrops <span class="n">${BACKDROPS.length}</span></h2>
-<div class="pg">${BACKDROPS.map(k => tile('bd-' + k, k, `<piix-backdrop kind="${k}" height="170"></piix-backdrop>`, `<piix-backdrop kind="${k}" fill></piix-backdrop>`)).join('')}</div>
 <h2 class="fam-h" id="scenes">Scenes <span class="n">${SCENES.length}</span></h2>
-<div class="pg">${SCENES.map(([k, what]) => tile('sc-' + k, k + ': ' + what, `<piix-scene scene="${k}" cell="5"></piix-scene>`, `<piix-scene scene="${k}"></piix-scene>`)).join('')}</div>`;
+${SCENES.map(sceneShow).join('\n')}
+<h2 class="fam-h" id="backdrops">Backdrops <span class="n">${BACKDROPS.length}</span></h2>
+${BACKDROPS.map(backdropShow).join('\n')}
+${family('options', 'All options', PRINT, studioSection)}`;
 
 /* ---------- type ---------- */
 const typeBody = `<header class="doc-head">
@@ -662,7 +681,7 @@ const indexBody = `<header class="doc-head">
     <a href="pals.html#toys" style="--accent:var(--sun)"><div class="ov-art"><span style="font:780 30px var(--f-sans);letter-spacing:-.03em" id="ov-toys">toy box</span></div><h3>Toys + groups <span>${kinds.toy.length + kinds.group.length}</span></h3><p>Throwable toys that land on your page, and whole crews in one tag: ducks, ants, fish, a choir, fireflies.</p></a>
     <a href="powers.html" style="--accent:var(--coral)"><div class="ov-art"><span style="font:780 30px var(--f-sans);letter-spacing:-.03em" id="ov-powers">superpowers</span></div><h3>Superpowers <span>${POWERS.length}</span></h3><p>Pals that step out of the page, do real interface jobs, or turn your site into a game.</p></a>
     <a href="3d.html" style="--accent:var(--sky)"><div class="ov-art"><piix-voxel pal="bitbug" size="120" spin="10"></piix-voxel><piix-voxel pal="frog" look="toon" size="120" spin="10"></piix-voxel></div><h3>3D <span>${STUDIO.length}</span></h3><p>Pals as real 3D models: spin them, collect them as holo cards, put them on a planet or in a snow globe.</p></a>
-    <a href="ascii.html" style="--accent:var(--coral)"><div class="ov-art" style="padding:0;overflow:hidden"><piix-backdrop kind="rain" fill></piix-backdrop></div><h3>ASCII &amp; dither <span>${PRINT.length}</span></h3><p>Animated ASCII, dither and halftone backgrounds, and little films with feeling: a kiss, a heartbreak, a hug.</p></a>
+    <a href="ascii.html" style="--accent:var(--coral)"><div class="ov-art" style="padding:0;overflow:hidden;background:#07060b"><piix-scene scene="kiss" look="dither" style="width:100%;height:100%"></piix-scene></div><h3>ASCII &amp; dither <span>${SCENES.length + BACKDROPS.length}</span></h3><p>Animated ASCII, dither and halftone backgrounds, and little films with feeling: a kiss, a heartbreak, a hug.</p></a>
     <a href="type.html" style="--accent:var(--violet)"><div class="ov-art"><div style="width:80%"><piix-type text="abc" rows="14" cell="6" shade="#c6f432" fit intro="none"></piix-type></div></div><h3>Pixel type <span>1</span></h3><p>Any font as chunky extruded blocks that rain in, lift around the cursor and ripple. Pals can walk on it.</p></a>
   </div>
   <piix-pal pal="bitbug" on="#ov-word" scale="3"></piix-pal>
