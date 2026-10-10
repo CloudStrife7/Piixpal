@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Piixpal 3D lab</title>
+<style>
+  body { margin: 0; padding: 24px; background: #f3eee3; font: 14px/1.4 system-ui; color: #17121f }
+  .row { display: flex; flex-wrap: wrap; gap: 18px; align-items: end; margin-bottom: 18px }
+  figure { margin: 0; text-align: center } figcaption { font: 12px ui-monospace, monospace; color: #6c6477 }
+  .dark { background: #17121f; padding: 14px; border-radius: 16px }
+</style>
+<body>
+<div class="row" id="looks"></div>
+<div class="row">
+  <piix-card pal="frog"></piix-card><piix-card pal="whale" rarity="rare"></piix-card><piix-card pal="bitbug" look="toon"></piix-card>
+  <piix-planet></piix-planet>
+</div>
+<div class="row">
+  <piix-globe></piix-globe><span class="dark"><piix-holo></piix-holo></span>
+  <piix-room scene="desk"></piix-room><piix-room scene="pond"></piix-room><piix-room scene="night"></piix-room>
+</div>
+<script src="../piixpal.js"></script>
+<script>
+  for (const look of Piixpal.vox.looks) looks.insertAdjacentHTML('beforeend', `<figure${look === 'holo' || look === 'wire' ? ' class="dark"' : ''}><piix-voxel pal="bitbug" look="${look}" size="140" spin="0"></piix-voxel><figcaption>${look}</figcaption></figure>`);
+</script>
