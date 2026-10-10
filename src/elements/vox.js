@@ -20,3 +20,19 @@ const voxArt = (name, clip, i = 0) => {
   return null;
 };
 
+/* a model is the list of cube faces nobody else is hiding, plus its centre and size */
+const voxModel = vox => {
+  const has = new Set(vox.map(v => voxKey(v[0], v[1], v[2])));
+  let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
+  const faces = [];
+  for (const v of vox) {
+    x0 = Math.min(x0, v[0]); x1 = Math.max(x1, v[0]); y0 = Math.min(y0, v[1]); y1 = Math.max(y1, v[1]); z0 = Math.min(z0, v[2]); z1 = Math.max(z1, v[2]);
+    for (let d = 0; d < 6; d++) {
+      const D = VOX_DIRS[d];
+      if (!has.has(voxKey(v[0] + D[0], v[1] + D[1], v[2] + D[2]))) faces.push([v[0], v[1], v[2], d, v[3], v[4] || 0]);
+    }
+  }
+  const w = x1 - x0 + 1, h = y1 - y0 + 1, d = z1 - z0 + 1;
+  return { faces, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, cz: (z0 + z1) / 2, w, h, d, r: Math.hypot(w, h, d) / 2, bottom: y1 + .5 };
+};
+
