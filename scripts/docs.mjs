@@ -2,6 +2,7 @@
 // Sprite names and taglines are read straight from src/sprites/*.js.
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { POWERS, FAMILIES } from './powers-data.mjs';
+import { STUDIO } from './studio-data.mjs';
 import { gzipSync } from 'node:zlib';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -222,6 +223,7 @@ const sidebar = active => {
     ${group('sprites', 'Sprites', 'sprites.html', sprites.length, [['Big 3D', bigs.map(x => item('sprites.html#s-' + x.name, x.name, x.accent))], ['Small', smalls.map(x => item('sprites.html#s-' + x.name, x.name, x.accent))]])}
     ${group('pals', 'Pals', 'pals.html', PALS.length, [['Characters', kinds.pal.map(p => item('pals.html#' + p.id, p.id, p.accent))], ['Interactions', kinds.play.map(p => item('pals.html#' + p.id, p.id, p.accent))], ['Toys', kinds.toy.map(p => item('pals.html#' + p.id, p.id, p.accent))], ['Groups', kinds.group.map(p => item('pals.html#' + p.id, p.id, p.accent))]])}
     ${group('powers', 'Superpowers', 'powers.html', POWERS.length, FAMILIES.map(([id, name]) => [name, POWERS.filter(p => p.fam === id).map(p => item('powers.html#' + p.id, p.id, p.accent))]))}
+    ${group('studio', '3D', '3d.html', STUDIO.length, [['Pals in 3D', STUDIO.map(x => item('3d.html#' + x.id, x.id, x.accent))]])}
     <nav class="side-start">${link('crowd.html', 'Crowd', 'crowd')}${link('type.html', 'Pixel type', 'type')}</nav>
     <p class="side-none" hidden>Nothing by that name.</p>
   </aside>`;
@@ -251,6 +253,7 @@ ${fonts}<link rel="stylesheet" href="../site/site.css">
     <nav class="links" aria-label="Site">
       <a href="./"${key === 'index' || key === 'sprites' || key === 'pals' || key === 'crowd' || key === 'type' ? ' aria-current="page"' : ''}>Components</a>
       <a href="powers.html"${key === 'powers' ? ' aria-current="page"' : ''}>Superpowers</a>
+      <a href="3d.html"${key === 'studio' ? ' aria-current="page"' : ''}>3D</a>
       <a href="install.html"${key === 'install' ? ' aria-current="page"' : ''}>Install</a>
       <a href="builder.html"${key === 'builder' ? ' aria-current="page"' : ''}>Builder</a>
     </nav>
@@ -288,7 +291,7 @@ const CDN_ALL = 'https://cdn.jsdelivr.net/npm/piixpal@0.4/piixpal.min.js';
 const CDN_ONE = n => `https://cdn.jsdelivr.net/npm/piixpal@0.4/dist/c/${n}.min.js`;
 /* every way to add one component, as tabs: like a UI library's install box */
 const pascal = n => n.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join('');
-const tagComp = { weather: 'piix-weather', stickers: 'piix-stickers', avatar: 'piix-avatar' };
+const tagComp = { weather: 'piix-weather', stickers: 'piix-stickers', avatar: 'piix-avatar', ...Object.fromEntries(STUDIO.map(x => [x.id, x.tag])) };
 const installTabs = (name, kind, markup, where = 'h1', query = '') => {
   if (kind === 'element') {
     const tabs = [
@@ -452,7 +455,7 @@ ${smalls.map(spriteCard).join('\n')}
 
 /* ---------- component sections ---------- */
 /* one line per component, for the top of its section */
-const BRIEF = { "bitbug": "A lime beetle that crawls along the real outline of your letters.", "boing": "A jelly drop that bounces on your footer and lands with a splat.", "moss": "A mushroom that sits on your text reading its book, ignoring you (mostly).", "lurk": "A shy creature that peeks over the edge of your cards.", "thread": "A spider that dangles from your nav on a long thread.", "pip": "A round bird that hops between your buttons and perches on them.", "bumble": "A fuzzy bee that buzzes about your element.", "shel": "A snail that creeps along your text, leaving a shiny trail.", "gecko": "A gecko that climbs up and around the sides of your cards.", "mole": "Whack-a-mole: it pops out of your element, you bop it.", "balloon": "A balloon with a face, tied to your element, bobbing in the breeze.", "para": "A parachutist who drops onto your section when it scrolls into view.", "roomba": "A robot vacuum that sweeps along your footer, very seriously.", "kitty": "A black cat that lounges on your element and swats at the cursor.", "hiss": "A snake that slithers along your headings.", "pinch": "A crab that walks sideways along your text.", "shibe": "A shiba that lounges on your text, tail wagging.", "capy": "A capybara with a yuzu on its head, completely unbothered.", "peeper": "Guards your inputs: follows the caret, covers its eyes for passwords.", "scrolly": "A little runner on a reading-progress bar.", "echo": "A copycat cursor that replays your moves half a second late.", "snip": "A highlighter that hops to whatever text you select.", "beep": "A robot that panics when someone ticks “I’m not a robot”.", "router": "A Wi-Fi router whose signal bars follow your cursor.", "termi": "A tiny terminal that types out your lines, one character at a time.", "frog": "A frog that snaps its tongue at your cursor.", "penguin": "A penguin that belly-slides along your element.", "rocket": "Sits on your Deploy button. Click it: countdown, lift-off, landing.", "ball": "A beach ball you can throw around your page.", "duck": "A rubber duck you can throw. It squeaks when it lands.", "dice": "Throw it and it lands on a random face.", "pebble": "A heavy rock that lands with a thud every pal hears.", "cube": "A jelly cube that bounces high and wobbles.", "can": "A soda can that rolls off the edge of everything.", "fish": "A school of fish that swims inside any box and flees your cursor.", "sparrows": "Birds on a wire that scatter when you get close.", "polly": "Reads your page aloud, hopping along each word as it is spoken.", "gist": "An owl that sums up your article in a few key points.", "tabby": "A cat that lives in your browser tab’s icon and naps while you’re away.", "sprout": "A focus-timer plant that pops out into its own always-on-top window.", "plane": "A plane that tows your announcement banner across the page.", "fetch": "A dog that runs off on every fetch() and brings back the response.", "scout": "Onboarding tours, guided by a tiny explorer.", "drone": "Flies the product picture into your cart when someone adds to cart.", "crumb": "A mouse that eats your cookie banner when someone accepts or rejects.", "buff": "A password-strength meter that lifts heavier as the password gets stronger.", "meh": "A face that rides your rating slider, from furious to delighted.", "squish": "A marshmallow that gets squashed as the text nears its limit.", "gulp": "A pelican that gulps down files dropped on your drop zone.", "plug": "Shows up when the connection drops, plugs back in when it returns.", "pix": "A tiny hero that lets visitors play your page as a platformer.", "hatch": "Every visitor hatches their own one-of-a-kind pet.", "weather": "Snow that settles on your letters, plus rain, leaves and petals.", "stickers": "A sheet of stickers visitors peel off and stick anywhere on your page.", "avatar": "A unique animated pixel avatar for any name." };
+const BRIEF = { "bitbug": "A lime beetle that crawls along the real outline of your letters.", "boing": "A jelly drop that bounces on your footer and lands with a splat.", "moss": "A mushroom that sits on your text reading its book, ignoring you (mostly).", "lurk": "A shy creature that peeks over the edge of your cards.", "thread": "A spider that dangles from your nav on a long thread.", "pip": "A round bird that hops between your buttons and perches on them.", "bumble": "A fuzzy bee that buzzes about your element.", "shel": "A snail that creeps along your text, leaving a shiny trail.", "gecko": "A gecko that climbs up and around the sides of your cards.", "mole": "Whack-a-mole: it pops out of your element, you bop it.", "balloon": "A balloon with a face, tied to your element, bobbing in the breeze.", "para": "A parachutist who drops onto your section when it scrolls into view.", "roomba": "A robot vacuum that sweeps along your footer, very seriously.", "kitty": "A black cat that lounges on your element and swats at the cursor.", "hiss": "A snake that slithers along your headings.", "pinch": "A crab that walks sideways along your text.", "shibe": "A shiba that lounges on your text, tail wagging.", "capy": "A capybara with a yuzu on its head, completely unbothered.", "peeper": "Guards your inputs: follows the caret, covers its eyes for passwords.", "scrolly": "A little runner on a reading-progress bar.", "echo": "A copycat cursor that replays your moves half a second late.", "snip": "A highlighter that hops to whatever text you select.", "beep": "A robot that panics when someone ticks “I’m not a robot”.", "router": "A Wi-Fi router whose signal bars follow your cursor.", "termi": "A tiny terminal that types out your lines, one character at a time.", "frog": "A frog that snaps its tongue at your cursor.", "penguin": "A penguin that belly-slides along your element.", "rocket": "Sits on your Deploy button. Click it: countdown, lift-off, landing.", "ball": "A beach ball you can throw around your page.", "duck": "A rubber duck you can throw. It squeaks when it lands.", "dice": "Throw it and it lands on a random face.", "pebble": "A heavy rock that lands with a thud every pal hears.", "cube": "A jelly cube that bounces high and wobbles.", "can": "A soda can that rolls off the edge of everything.", "fish": "A school of fish that swims inside any box and flees your cursor.", "sparrows": "Birds on a wire that scatter when you get close.", "polly": "Reads your page aloud, hopping along each word as it is spoken.", "gist": "An owl that sums up your article in a few key points.", "tabby": "A cat that lives in your browser tab’s icon and naps while you’re away.", "sprout": "A focus-timer plant that pops out into its own always-on-top window.", "plane": "A plane that tows your announcement banner across the page.", "fetch": "A dog that runs off on every fetch() and brings back the response.", "scout": "Onboarding tours, guided by a tiny explorer.", "drone": "Flies the product picture into your cart when someone adds to cart.", "crumb": "A mouse that eats your cookie banner when someone accepts or rejects.", "buff": "A password-strength meter that lifts heavier as the password gets stronger.", "meh": "A face that rides your rating slider, from furious to delighted.", "squish": "A marshmallow that gets squashed as the text nears its limit.", "gulp": "A pelican that gulps down files dropped on your drop zone.", "plug": "Shows up when the connection drops, plugs back in when it returns.", "pix": "A tiny hero that lets visitors play your page as a platformer.", "hatch": "Every visitor hatches their own one-of-a-kind pet.", "weather": "Snow that settles on your letters, plus rain, leaves and petals.", "stickers": "A sheet of stickers visitors peel off and stick anywhere on your page.", "avatar": "A unique animated pixel avatar for any name.", "voxel": "Any pal as a 3D toy you can spin, in eight looks from glossy to ASCII.", "card": "A holographic trading card for any pal, with the pal standing in 3D.", "planet": "A tiny voxel world with pals walking round it.", "globe": "A pal in a snow globe. Shake it.", "holo": "A pal projected as a flickering hologram.", "room": "A little isometric voxel diorama with a pal living in it." };
 /* the first sentence of a description */
 const brief = d => { const m = String(d || '').match(/^[\s\S]*?[.!?](?=\s|$)/); return m ? m[0] : String(d || ''); };
 /* options, folded away under the code */
@@ -500,6 +503,19 @@ const powersBody = `<header class="doc-head">
   ${jump(FAMILIES.map(([id, name]) => [id, name, POWERS.filter(p => p.fam === id).length]))}
 </header>
 ${FAMILIES.map(([id, name]) => POWERS.some(p => p.fam === id) ? family(id, name, POWERS.filter(p => p.fam === id), powerSection) : '').join('\n')}`;
+
+/* ---------- 3D ---------- */
+const studioSection = x => cmpSection({
+  id: x.id, accent: x.accent, tall: x.tall, tag: `<${x.tag}>`, desc: x.desc, hab: x.hab,
+  code: installTabs(x.id, 'element', x.code, 'main'),
+  opts: options([...(x.attrs || []), ...(x.api ? [['API', `<code>${esc(x.api)}</code>`]] : []), ...(x.events ? [['events', x.events]] : [])])
+});
+const studioBody = `<header class="doc-head">
+  <div class="crumbs"><a href="./">Components</a><span>/</span><span>3D</span></div>
+  <h1>3D</h1>
+  <p>The pals as real 3D models: toys you can spin, trading cards, a tiny planet, a snow globe, a hologram and little voxel rooms. Every one can be drawn glossy, in clay, cel-shaded, as a wireframe, a hologram, or in halftone, dither or ASCII.</p>
+</header>
+${family('in-3d', 'Pals in 3D', STUDIO, studioSection)}`;
 
 /* ---------- type ---------- */
 const typeBody = `<header class="doc-head">
@@ -621,7 +637,7 @@ const pick = n => sprites.slice(0, n).map(s => `<piix-sprite name="${s.name}" sc
 const indexBody = `<header class="doc-head">
   <div class="crumbs"><span>Components</span></div>
   <h1>Components</h1>
-  <p>${sprites.length + PALS.length + POWERS.length + 4} components, every one a plain web component. One script tag, then copy any tag from these pages into your HTML, React, Vue, Svelte, Astro, Webflow or Framer project.</p>
+  <p>${sprites.length + PALS.length + POWERS.length + STUDIO.length + 4} components, every one a plain web component. One script tag, then copy any tag from these pages into your HTML, React, Vue, Svelte, Astro, Webflow or Framer project.</p>
 </header>
 <section class="doc-sec" aria-label="Component families">
   <div class="ov">
@@ -630,6 +646,7 @@ const indexBody = `<header class="doc-head">
     <a href="crowd.html" style="--accent:var(--sky)"><div class="ov-art"><piix-crowd mode="crowd" count="26" height="140" scale="2" style="width:100%"></piix-crowd></div><h3>Crowd <span>3</span></h3><p>Hundreds of tiny agents on one stage. They wander and high-five, swarm your cursor, or spell a word.</p></a>
     <a href="pals.html#toys" style="--accent:var(--sun)"><div class="ov-art"><span style="font:780 30px var(--f-sans);letter-spacing:-.03em" id="ov-toys">toy box</span></div><h3>Toys + groups <span>${kinds.toy.length + kinds.group.length}</span></h3><p>Throwable toys that land on your page, and whole crews in one tag: ducks, ants, fish, a choir, fireflies.</p></a>
     <a href="powers.html" style="--accent:var(--coral)"><div class="ov-art"><span style="font:780 30px var(--f-sans);letter-spacing:-.03em" id="ov-powers">superpowers</span></div><h3>Superpowers <span>${POWERS.length}</span></h3><p>Pals that step out of the page, do real interface jobs, or turn your site into a game.</p></a>
+    <a href="3d.html" style="--accent:var(--sky)"><div class="ov-art"><piix-voxel pal="bitbug" size="120" spin="10"></piix-voxel><piix-voxel pal="frog" look="toon" size="120" spin="10"></piix-voxel></div><h3>3D <span>${STUDIO.length}</span></h3><p>Pals as real 3D models: spin them, collect them as holo cards, put them on a planet or in a snow globe.</p></a>
     <a href="type.html" style="--accent:var(--violet)"><div class="ov-art"><div style="width:80%"><piix-type text="abc" rows="14" cell="6" shade="#c6f432" fit intro="none"></piix-type></div></div><h3>Pixel type <span>1</span></h3><p>Any font as chunky extruded blocks that rain in, lift around the cursor and ripple. Pals can walk on it.</p></a>
   </div>
   <piix-pal pal="bitbug" on="#ov-word" scale="3"></piix-pal>
@@ -651,7 +668,7 @@ const installBody = `<header class="doc-head">
 </header>
 
 <section class="doc-sec" id="cdn" aria-labelledby="i1"><h2 id="i1">Everything, one tag</h2>
-  <p>All ${sprites.length + PALS.length + POWERS.length + 4} components in one file (about ${GZ} KB gzipped), served free by jsDelivr. Then use any tag from these pages.</p>
+  <p>All ${sprites.length + PALS.length + POWERS.length + STUDIO.length + 4} components in one file (about ${GZ} KB gzipped), served free by jsDelivr. Then use any tag from these pages.</p>
   ${codeBox(`<script src="${CDN_ALL}"></script>\n\n<h1>Hello <piix-pal pal="bitbug"></piix-pal></h1>`)}
 </section>
 
@@ -743,6 +760,7 @@ const pages = [
   ['sprites.html', { key: 'sprites', title: 'Sprites', desc: `${sprites.length} inline pixel sprites with cursor-following eyes. Copy a tag, paste it anywhere.`, body: spritesBody }],
   ['pals.html', { key: 'pals', title: 'Pals', desc: 'Pixel characters that live on your page: crawl, bounce, peek, perch, hang, follow, creep.', body: palsBody }],
   ['powers.html', { key: 'powers', title: 'Superpowers', desc: 'Pals that step out of the page, do real interface jobs, or turn your site into a game.', body: powersBody }],
+  ['3d.html', { key: 'studio', title: '3D', desc: 'Pals as real 3D models: spinning toys, holo trading cards, a voxel planet, a snow globe, a hologram and voxel dioramas.', body: studioBody }],
   ['install.html', { key: 'install', title: 'Install', desc: 'Every way to add Piixpal to a site: one tag, single files, no-markup, JS, React, Vue, Svelte, bookmarklet.', body: installBody }],
   ['builder.html', { key: 'builder', title: 'Builder', desc: 'Pick pals, choose where they live, copy one line.', body: builderBody }],
   ['crowd.html', { key: 'crowd', title: 'Crowd', desc: 'A stage of hundreds of tiny agents: crowd, swarm and formation modes.', body: crowdBody }],
