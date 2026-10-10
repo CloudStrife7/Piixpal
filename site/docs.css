@@ -260,3 +260,6 @@
 .side-fold > summary::after{content:"+";font:600 18px/1 var(--f-mono)}
 .side-fold[open] > summary::after{content:"–"}
 .side-fold[open] > summary{margin-bottom:12px}
+
+/* 3D habitats: everything centred, wrapping */
+.h3d{position:absolute;inset:0;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;align-content:center;gap:14px;padding:16px;overflow:hidden}
