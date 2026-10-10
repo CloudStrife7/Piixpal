@@ -22,6 +22,7 @@
     <nav class="links" aria-label="Site">
       <a href="./" aria-current="page">Components</a>
       <a href="powers.html">Superpowers</a>
+      <a href="3d.html">3D</a>
       <a href="install.html">Install</a>
       <a href="builder.html">Builder</a>
     </nav>
@@ -55,6 +56,10 @@
       <h5>Pals with jobs</h5><a href="powers.html#bulb" style="--dot:var(--sun)"><i></i>Bulb</a><a href="powers.html#pidge" style="--dot:var(--violet)"><i></i>Pidge</a><a href="powers.html#plane" style="--dot:var(--coral)"><i></i>Plane</a><a href="powers.html#fetch" style="--dot:var(--sun)"><i></i>Fetch</a><a href="powers.html#scout" style="--dot:var(--mint)"><i></i>Scout</a><a href="powers.html#drone" style="--dot:var(--sky)"><i></i>Drone</a><a href="powers.html#crumb" style="--dot:var(--sun)"><i></i>Crumb</a><a href="powers.html#avatar" style="--dot:var(--violet)"><i></i>Avatar</a><a href="powers.html#buff" style="--dot:var(--coral)"><i></i>Buff</a><a href="powers.html#meh" style="--dot:var(--sun)"><i></i>Meh</a><a href="powers.html#squish" style="--dot:var(--violet)"><i></i>Squish</a><a href="powers.html#gulp" style="--dot:var(--sun)"><i></i>Gulp</a><a href="powers.html#plug" style="--dot:var(--mint)"><i></i>Plug</a>
       <h5>Play your site</h5><a href="powers.html#pix" style="--dot:var(--lime)"><i></i>Pix</a><a href="powers.html#weather" style="--dot:var(--sky)"><i></i>Weather</a><a href="powers.html#hatch" style="--dot:var(--mint)"><i></i>Hatch</a><a href="powers.html#gem" style="--dot:var(--sky)"><i></i>Gem</a><a href="powers.html#stickers" style="--dot:var(--coral)"><i></i>Stickers</a>
     </details>
+    <details class="sg">
+      <summary><a href="3d.html">3D</a><span class="n">6</span></summary>
+      <h5>Pals in 3D</h5><a href="3d.html#voxel" style="--dot:var(--lime)"><i></i>Voxel</a><a href="3d.html#card" style="--dot:var(--coral)"><i></i>Card</a><a href="3d.html#planet" style="--dot:var(--sky)"><i></i>Planet</a><a href="3d.html#globe" style="--dot:var(--violet)"><i></i>Globe</a><a href="3d.html#holo" style="--dot:var(--mint)"><i></i>Holo</a><a href="3d.html#room" style="--dot:var(--sun)"><i></i>Room</a>
+    </details>
     <nav class="side-start"><a href="crowd.html">Crowd</a><a href="type.html">Pixel type</a></nav>
     <p class="side-none" hidden>Nothing by that name.</p>
   </aside>
@@ -62,7 +67,7 @@
 <header class="doc-head">
   <div class="crumbs"><span>Components</span></div>
   <h1>Components</h1>
-  <p>118 components, every one a plain web component. One script tag, then copy any tag from these pages into your HTML, React, Vue, Svelte, Astro, Webflow or Framer project.</p>
+  <p>124 components, every one a plain web component. One script tag, then copy any tag from these pages into your HTML, React, Vue, Svelte, Astro, Webflow or Framer project.</p>
 </header>
 <section class="doc-sec" aria-label="Component families">
   <div class="ov">
@@ -71,6 +76,7 @@
     <a href="crowd.html" style="--accent:var(--sky)"><div class="ov-art"><piix-crowd mode="crowd" count="26" height="140" scale="2" style="width:100%"></piix-crowd></div><h3>Crowd <span>3</span></h3><p>Hundreds of tiny agents on one stage. They wander and high-five, swarm your cursor, or spell a word.</p></a>
     <a href="pals.html#toys" style="--accent:var(--sun)"><div class="ov-art"><span style="font:780 30px var(--f-sans);letter-spacing:-.03em" id="ov-toys">toy box</span></div><h3>Toys + groups <span>14</span></h3><p>Throwable toys that land on your page, and whole crews in one tag: ducks, ants, fish, a choir, fireflies.</p></a>
     <a href="powers.html" style="--accent:var(--coral)"><div class="ov-art"><span style="font:780 30px var(--f-sans);letter-spacing:-.03em" id="ov-powers">superpowers</span></div><h3>Superpowers <span>23</span></h3><p>Pals that step out of the page, do real interface jobs, or turn your site into a game.</p></a>
+    <a href="3d.html" style="--accent:var(--sky)"><div class="ov-art"><piix-voxel pal="bitbug" size="120" spin="10"></piix-voxel><piix-voxel pal="frog" look="toon" size="120" spin="10"></piix-voxel></div><h3>3D <span>6</span></h3><p>Pals as real 3D models: spin them, collect them as holo cards, put them on a planet or in a snow globe.</p></a>
     <a href="type.html" style="--accent:var(--violet)"><div class="ov-art"><div style="width:80%"><piix-type text="abc" rows="14" cell="6" shade="#c6f432" fit intro="none"></piix-type></div></div><h3>Pixel type <span>1</span></h3><p>Any font as chunky extruded blocks that rain in, lift around the cursor and ripple. Pals can walk on it.</p></a>
   </div>
   <piix-pal pal="bitbug" on="#ov-word" scale="3"></piix-pal>
