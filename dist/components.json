@@ -116,9 +116,11 @@
  "stickers": "power",
  "tabby": "power",
  "weather": "power",
+ "backdrop": "3d",
  "card": "3d",
  "globe": "3d",
  "holo": "3d",
  "room": "3d",
+ "scene": "3d",
  "voxel": "3d"
 }
