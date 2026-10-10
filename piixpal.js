@@ -1483,6 +1483,297 @@ const CELL_SHAPES = {
   diamond: (g, x, y, s) => { g.moveTo(x + s / 2, y); g.lineTo(x + s, y + s / 2); g.lineTo(x + s / 2, y + s); g.lineTo(x, y + s / 2); g.closePath(); }
 };
 
+/* ---- elements/vox.js ---- */
+/* VOX: a small voxel engine. It puffs any pal's pixel art up into a real 3D model, turns it,
+ * lights it from wherever the pointer is, and draws it as glossy cubes, clay, a cel-shaded toy,
+ * a wireframe, a hologram, or through a print style: halftone dots, ordered dither or ASCII.
+ * The 3D components (voxel, card, planet, globe, holo, room) are all built on it. */
+
+const VOX_LOOKS = ['glossy', 'clay', 'toon', 'wire', 'holo', 'halftone', 'dither', 'ascii'];
+const VOX_DIRS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+const voxKey = (x, y, z) => ((x + 512) * 1024 + (y + 512)) * 1024 + (z + 512);
+const voxNorm = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+
+/* the pixel rows behind a pal or a sprite, for one frame of one clip */
+const voxArt = (name, clip, i = 0) => {
+  const s = SPRITES[name], f = FIGURES[name];
+  i = Math.max(0, i | 0);
+  if (s) {
+    const c = s.frames[clip] || s.frames[Object.keys(s.frames)[0]];
+    return { rows: c[i % c.length], palette: s.palette, h: s.h, n: c.length, fps: (typeof s.fps === 'object' ? s.fps[clip] : s.fps) || 6 };
+  }
+  if (f) return { rows: f.frames[i % f.frames.length], palette: figurePalette(f), h: f.h, n: f.frames.length, fps: f.fps || 2 };
+  return null;
+};
+
+/* a model is the list of cube faces nobody else is hiding, plus its centre and size */
+const voxModel = vox => {
+  const has = new Set(vox.map(v => voxKey(v[0], v[1], v[2])));
+  let x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9;
+  const faces = [];
+  for (const v of vox) {
+    x0 = Math.min(x0, v[0]); x1 = Math.max(x1, v[0]); y0 = Math.min(y0, v[1]); y1 = Math.max(y1, v[1]); z0 = Math.min(z0, v[2]); z1 = Math.max(z1, v[2]);
+    for (let d = 0; d < 6; d++) {
+      const D = VOX_DIRS[d];
+      if (!has.has(voxKey(v[0] + D[0], v[1] + D[1], v[2] + D[2]))) faces.push([v[0], v[1], v[2], d, v[3], v[4] || 0]);
+    }
+  }
+  const w = x1 - x0 + 1, h = y1 - y0 + 1, d = z1 - z0 + 1;
+  return { faces, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, cz: (z0 + z1) / 2, w, h, d, r: Math.hypot(w, h, d) / 2, bottom: y1 + .5 };
+};
+
+/* puff pixel art up into voxels: the further a pixel is from the silhouette's edge, the thicker
+ * the toy is there, so pals come out round like soft vinyl figures rather than flat slabs */
+const VOX_MODELS = new WeakMap();
+const voxFromArt = (art, depth = 3, at = [0, 0, 0]) => {
+  const memo = VOX_MODELS.get(art.rows);
+  if (memo && memo.depth === depth && !at[0] && !at[1] && !at[2]) return memo;
+  const vox = voxCells(art, depth, at), m = voxModel(vox);
+  m.depth = depth; m.cells = vox;
+  if (!at[0] && !at[1] && !at[2]) VOX_MODELS.set(art.rows, m);
+  return m;
+};
+const voxCells = (art, depth = 3, at = [0, 0, 0]) => {
+  const rows = art.rows, h = rows.length, pad = (art.h || h) - h, w = Math.max(...rows.map(r => r.length));
+  const on = (x, y) => y >= 0 && y < h && x >= 0 && x < (rows[y] || '').length && !!art.palette[rows[y][x]];
+  const dist = rows.map(r => new Array(w).fill(0)), q = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (on(x, y) && (!on(x - 1, y) || !on(x + 1, y) || !on(x, y - 1) || !on(x, y + 1))) { dist[y][x] = 1; q.push([x, y]); }
+  for (let i = 0; i < q.length; i++) {
+    const [x, y] = q[i];
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (on(x + dx, y + dy) && !dist[y + dy][x + dx]) { dist[y + dy][x + dx] = dist[y][x] + 1; q.push([x + dx, y + dy]); }
+  }
+  const vox = [], col = {};
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!on(x, y)) continue;
+    const c = rows[y][x], rgb = col[c] || (col[c] = hexRGBA(art.palette[c]));
+    const half = Math.min(depth, Math.floor((dist[y][x] - 1) * .85));
+    for (let z = -half; z <= half; z++) vox.push([x + at[0], y + pad + at[1], z + at[2], rgb, 0]);
+  }
+  return vox;
+};
+
+/* ---------- drawing ---------- */
+/* o: { yaw, pitch, s (px per voxel), x, y (centre on the canvas), light [x,y,z], look, amb, back, persp } */
+const voxDraw = (g, m, o) => {
+  const cy = Math.cos(o.yaw), sy = Math.sin(o.yaw), cp = Math.cos(o.pitch), sp = Math.sin(o.pitch);
+  const rot = (x, y, z) => { const x1 = x * cy + z * sy, z1 = -x * sy + z * cy; return [x1, y * cp - z1 * sp, y * sp + z1 * cp]; };
+  const N = VOX_DIRS.map(D => rot(D[0], D[1], D[2]));
+  const U = VOX_DIRS.map(D => D[0] ? rot(0, 1, 0) : rot(1, 0, 0));
+  const V = VOX_DIRS.map(D => D[2] ? rot(0, 1, 0) : rot(0, 0, 1));
+  const L = voxNorm(o.light || [-.5, -.8, .7]), H = voxNorm([L[0], L[1], L[2] + 1]);
+  const look = o.look || 'glossy', amb = o.amb ?? (look === 'clay' ? .58 : .44), back = o.back || look === 'wire';
+  const list = [];
+  for (const f of m.faces) {
+    const n = N[f[3]], front = n[2] > 0;
+    if (!front && !back) continue;
+    const c = rot(f[0] - m.cx, f[1] - m.cy, f[2] - m.cz);
+    list.push([c[0] + n[0] * .5, c[1] + n[1] * .5, c[2] + n[2] * .5, f, front]);
+  }
+  list.sort((a, b) => a[2] - b[2]);
+  const s = o.s, P = o.persp || 0;
+  g.lineJoin = 'round';
+  for (const [x, y, z, f, front] of list) {
+    const d = f[3], u = U[d], v = V[d], n = N[d], k = P ? 1 / (1 - z * P) : 1;
+    const X = (a, b) => o.x + (x + u[0] * a + v[0] * b) * s * k, Y = (a, b) => o.y + (y + u[1] * a + v[1] * b) * s * k;
+    g.beginPath();
+    g.moveTo(X(-.5, -.5), Y(-.5, -.5)); g.lineTo(X(.5, -.5), Y(.5, -.5)); g.lineTo(X(.5, .5), Y(.5, .5)); g.lineTo(X(-.5, .5), Y(-.5, .5)); g.closePath();
+    if (look === 'wire') {
+      g.strokeStyle = front ? (o.ink || 'rgba(198,244,50,.95)') : (o.ink2 || 'rgba(198,244,50,.16)');
+      g.lineWidth = Math.max(1, s * .06); g.stroke();
+      continue;
+    }
+    const diff = Math.max(0, n[0] * L[0] + n[1] * L[1] + n[2] * L[2]);
+    const [r, gg, b] = f[4];
+    let k2, add = 0;
+    if (f[5]) { k2 = 1.08; }
+    else if (look === 'toon') k2 = diff > .55 ? 1.05 : diff > .2 ? .82 : .62;
+    else if (look === 'clay') k2 = amb + .5 * diff;
+    else { k2 = amb + .62 * diff; add = Math.pow(Math.max(0, n[0] * H[0] + n[1] * H[1] + n[2] * H[2]), 26) * (look === 'holo' ? 120 : 150); }
+    let fill;
+    if (look === 'holo') { const t = (r * .3 + gg * .59 + b * .11) / 255 * .5 + .5; fill = `rgba(${90 * k2 * t + add | 0},${235 * k2 * t + add | 0},${255 * k2 * t + add | 0},.85)`; }
+    else if (look === 'clay') { const p = v => Math.min(255, (v * .78 + 255 * .22) * k2) | 0; fill = `rgb(${p(r)},${p(gg)},${p(b)})`; }
+    else fill = `rgb(${Math.min(255, r * k2 + add) | 0},${Math.min(255, gg * k2 + add) | 0},${Math.min(255, b * k2 + add) | 0})`;
+    g.fillStyle = fill; g.fill();
+    /* the same colour round the edge closes the hairline cracks between faces */
+    g.strokeStyle = fill; g.lineWidth = Math.max(.6, s * .04); g.stroke();
+  }
+};
+
+/* scratch canvases, kept per size */
+const VOX_BUF = {};
+const voxBuf = (key, w, h) => {
+  let c = VOX_BUF[key];
+  if (!c) c = VOX_BUF[key] = document.createElement('canvas');
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+  return c;
+};
+const VOX_BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => v / 16 - .5);
+const VOX_RAMP = ' .:-=+*#%@';
+
+/* paint a model into a canvas in any look: the print looks render glossy first, then re-draw it */
+const voxPaint = (g, m, o) => {
+  const w = g.canvas.width, h = g.canvas.height, look = o.look || 'glossy', dpr = o.dpr || 1;
+  if (look === 'halftone' || look === 'dither' || look === 'ascii') {
+    const src = voxBuf('src', w, h), sg = src.getContext('2d');
+    sg.clearRect(0, 0, w, h);
+    voxDraw(sg, m, { ...o, look: 'glossy' });
+    const cw = look === 'ascii' ? 7 * dpr : look === 'dither' ? 3 * dpr : Math.max(5, Math.round(w / 34)), ch = look === 'ascii' ? 11 * dpr : cw;
+    const cols = Math.ceil(w / cw), rows = Math.ceil(h / ch), sm = voxBuf('small', cols, rows), smg = sm.getContext('2d', { willReadFrequently: true });
+    smg.clearRect(0, 0, cols, rows); smg.imageSmoothingEnabled = true; smg.drawImage(src, 0, 0, cols, rows);
+    const px = smg.getImageData(0, 0, cols, rows), d = px.data;
+    if (look === 'dither') {
+      /* ordered dither into the pal's own colours, plus a shadow and a highlight of each */
+      const pal = m.pal || (m.pal = (() => { const seen = {}, out = []; for (const f of m.faces) { const k = f[4].join(); if (!seen[k]) { seen[k] = 1; out.push(f[4], f[4].map(v => v * .5), f[4].map(v => Math.min(255, v * 1.3 + 30))); } } return out; })());
+      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+        const i = (y * cols + x) * 4;
+        if (d[i + 3] < 110) { d[i + 3] = 0; continue; }
+        const e = VOX_BAYER[(y & 3) * 4 + (x & 3)] * 70;
+        let best = pal[0], bd = 1e9;
+        for (const p of pal) { const q = (p[0] - d[i] - e) ** 2 + (p[1] - d[i + 1] - e) ** 2 + (p[2] - d[i + 2] - e) ** 2; if (q < bd) { bd = q; best = p; } }
+        d[i] = best[0]; d[i + 1] = best[1]; d[i + 2] = best[2]; d[i + 3] = 255;
+      }
+      smg.putImageData(px, 0, 0);
+      g.imageSmoothingEnabled = false; g.drawImage(sm, 0, 0, cols * cw, rows * ch);
+      return;
+    }
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 ${ch * .95}px ui-monospace,Menlo,Consolas,monospace`;
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      const i = (y * cols + x) * 4, a = d[i + 3] / 255;
+      if (a < .08) continue;
+      const lum = (d[i] * .3 + d[i + 1] * .59 + d[i + 2] * .11) / 255;
+      const ink = `rgb(${d[i] * .82 | 0},${d[i + 1] * .82 | 0},${d[i + 2] * .82 | 0})`;
+      if (look === 'ascii') {
+        const c = VOX_RAMP[Math.min(9, Math.round(a * (.3 + .7 * (1 - lum)) * 9 + 1))];
+        g.fillStyle = ink; g.fillText(c, x * cw + cw / 2, y * ch + ch / 2);
+      } else {
+        const r = cw * .62 * Math.sqrt(a) * (.38 + .62 * (1 - lum * .8));
+        g.fillStyle = ink; g.beginPath(); g.arc(x * cw + cw / 2 + (y & 1 ? cw / 2 : 0), y * ch + ch / 2, r, 0, 6.283); g.fill();
+      }
+    }
+    return;
+  }
+  if (look === 'toon') {
+    /* cel shading with an ink outline: draw it once in ink, a little fatter, then on top */
+    const src = voxBuf('src', w, h), sg = src.getContext('2d');
+    sg.clearRect(0, 0, w, h); voxDraw(sg, m, o);
+    const t = Math.max(2, Math.round(o.s * .22));
+    g.save(); g.globalCompositeOperation = 'source-over';
+    const ink = voxBuf('ink', w, h), ig = ink.getContext('2d');
+    ig.clearRect(0, 0, w, h); ig.drawImage(src, 0, 0); ig.globalCompositeOperation = 'source-in'; ig.fillStyle = o.ink || '#17121f'; ig.fillRect(0, 0, w, h); ig.globalCompositeOperation = 'source-over';
+    for (const [dx, dy] of [[t, 0], [-t, 0], [0, t], [0, -t], [t * .7, t * .7], [-t * .7, t * .7], [t * .7, -t * .7], [-t * .7, -t * .7]]) g.drawImage(ink, dx, dy);
+    g.drawImage(src, 0, 0);
+    g.restore();
+    return;
+  }
+  if (look === 'holo') {
+    const src = voxBuf('src', w, h), sg = src.getContext('2d');
+    sg.clearRect(0, 0, w, h); voxDraw(sg, m, o);
+    /* scanlines eaten out of it, a soft glow, and now and then a slice that slips sideways */
+    sg.globalCompositeOperation = 'destination-out'; sg.fillStyle = 'rgba(0,0,0,.42)';
+    const off = ((o.t || 0) / 40) % (3 * dpr);
+    for (let y = off; y < h; y += 3 * dpr) sg.fillRect(0, y, w, dpr);
+    sg.globalCompositeOperation = 'source-over';
+    g.save();
+    g.shadowColor = 'rgba(88,232,255,.8)'; g.shadowBlur = 18 * dpr;
+    g.globalAlpha = .82 + Math.sin((o.t || 0) / 53) * .06 + (Math.sin((o.t || 0) / 7) > .97 ? -.35 : 0);
+    g.drawImage(src, 0, 0);
+    g.restore();
+    const glitch = Math.sin((o.t || 0) / 311) > .93;
+    if (glitch) { const y = (Math.sin((o.t || 0) / 17) * .5 + .5) * h * .8, hh = h * .07; g.clearRect(0, y, w, hh); g.drawImage(src, 0, y, w, hh, (Math.sin((o.t || 0) / 5) > 0 ? 1 : -1) * 6 * dpr, y, w, hh); }
+    return;
+  }
+  voxDraw(g, m, o);
+};
+
+/* ---------- the stage every 3D component stands on ----------
+ * a canvas in a shadow root, sized by the size attribute; drag to turn, the light follows the
+ * pointer, it only draws while on screen, and it holds still for reduced motion */
+class VoxStage extends HTMLElement {
+  static get observedAttributes() { return ['pal', 'name', 'look', 'size', 'spin', 'depth', 'clip', 'tilt', 'scene', 'pals', 'light', 'rarity']; }
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this._tick = this._tick.bind(this);
+    this._yaw = -.6; this._vy = 0; this._vis = true; this._L = [-.5, -.8, .7]; this._t0 = now();
+  }
+  connectedCallback() {
+    this._build();
+    this._io = new IntersectionObserver(es => { this._vis = es[es.length - 1].isIntersecting; }, { rootMargin: '100px' });
+    this._io.observe(this);
+    this.addEventListener('pointerdown', this._pd = e => this._down(e));
+    sub(this._tick);
+  }
+  disconnectedCallback() { unsub(this._tick); if (this._io) this._io.disconnect(); this.removeEventListener('pointerdown', this._pd); }
+  attributeChangedCallback(n, a, b) { if (a !== b && this._cv) { this._sig = ''; this._build(); } }
+  get palName() { return this.getAttribute('pal') || this.getAttribute('name') || this._defPal || 'bitbug'; }
+  get look() { const l = this.getAttribute('look'); return VOX_LOOKS.includes(l) ? l : this._defLook || 'glossy'; }
+  _css() { return ''; }
+  _html() { return '<canvas part="canvas"></canvas>'; }
+  _build() {
+    /* the pal's own file may still be loading: build now, and again once it's here */
+    const p = this.palName;
+    clearTimeout(this._retry);
+    if (this._needsPal !== false && !SPRITES[p] && !FIGURES[p] && (this._tries = (this._tries || 0) + 1) < 80) this._retry = setTimeout(() => this.isConnected && this._build(), 125);
+    const size = +this.getAttribute('size') || this._defSize || 200, H = Math.round(size * (this._aspect || 1));
+    const dpr = this._dpr = Math.min(devicePixelRatio || 1, 2);
+    this._w = size; this._h = H;
+    const html = this._html(size, H);
+    this.shadowRoot.innerHTML = `<style>:host{display:inline-block;vertical-align:bottom;line-height:0;touch-action:pan-y;cursor:grab;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+:host(:active){cursor:grabbing}canvas{display:block;width:${size}px;height:${H}px}${this._css(size, H)}</style>${html}`;
+    this._cv = this.shadowRoot.querySelector('canvas');
+    const cw = this._cvW || size, ch = this._cvH || H;
+    this._cv.width = Math.round(cw * dpr); this._cv.height = Math.round(ch * dpr);
+    this._cv.style.width = cw + 'px'; this._cv.style.height = ch + 'px';
+    this._g = this._cv.getContext('2d');
+    if (!this.hasAttribute('aria-label') || this._autoLabel) { this._autoLabel = true; this.setAttribute('role', 'img'); this.setAttribute('aria-label', this._label ? this._label() : `${this.palName}, in 3D`); }
+    if (this._setup) this._setup();
+  }
+  /* drag sideways to spin; a tap without moving pokes it */
+  _down(e) {
+    const x0 = e.clientX, y0 = e.clientY, yaw0 = this._yaw;
+    let lx = x0, lt = now(), moved = false;
+    const mv = ev => {
+      const dx = ev.clientX - x0;
+      if (Math.abs(dx) + Math.abs(ev.clientY - y0) > 5) moved = true;
+      this._yaw = yaw0 + dx * .012;
+      const t = now(), step = ev.clientX - lx;
+      this._vy = step * .012 / Math.max(.008, (t - lt) / 1000); lx = ev.clientX; lt = t;
+      this._dragging = true;
+      if (this._shake) this._shake(step, ev.movementY || 0);
+    };
+    const up = () => {
+      removeEventListener('pointermove', mv); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
+      this._dragging = false;
+      if (!moved) { this._hopAt = now(); this._poke && this._poke(); this.dispatchEvent(new CustomEvent('piix:poke', { bubbles: true })); }
+    };
+    addEventListener('pointermove', mv); addEventListener('pointerup', up); addEventListener('pointercancel', up);
+  }
+  _tick(dt, t) {
+    if (!this._vis || !this._g) return;
+    const R = reduced(), spin = this.hasAttribute('spin') ? +this.getAttribute('spin') : this._defSpin ?? 6;
+    if (!this._dragging) { this._vy = lerp(this._vy, R ? 0 : spin * Math.PI / 30, Math.min(1, dt * 1.6)); this._yaw += this._vy * dt; }
+    /* light: from the pointer when it's near, otherwise the default high-left key light */
+    const r = this.getBoundingClientRect();
+    let want = [-.5, -.8, .7];
+    if (this.getAttribute('light') !== 'fixed' && ptr.seen && ptr.cx > -1e4) {
+      const dx = (ptr.cx - (r.left + r.width / 2)) / Math.max(200, r.width), dy = (ptr.cy - (r.top + r.height / 2)) / Math.max(200, r.height);
+      if (Math.abs(dx) < 4 && Math.abs(dy) < 4) want = [clamp(dx, -1.5, 1.5), clamp(dy, -1.5, 1.5), .75];
+    }
+    for (let i = 0; i < 3; i++) this._L[i] = lerp(this._L[i], want[i], Math.min(1, dt * 6));
+    /* still scenes only redraw when the angle, the light or a hop changes */
+    if (this._static) {
+      const sig = this._yaw.toFixed(3) + this._L.map(v => v.toFixed(2)).join() + (now() - (this._hopAt || -1e9) < 600);
+      if (sig === this._sig) return;
+      this._sig = sig;
+    }
+    this._draw(dt, Math.max(0, t - this._t0));
+  }
+  /* a little jump after a poke, in canvas px */
+  _hop(t) { const e = (now() - (this._hopAt || -1e9)) / 1000; return e < .5 ? -Math.sin(e / .5 * Math.PI) * 18 * this._dpr : 0; }
+  get _pitch() { return -(this.hasAttribute('tilt') ? +this.getAttribute('tilt') : this._defTilt ?? 22) * Math.PI / 180; }
+}
+Piixpal.vox = { looks: VOX_LOOKS, art: voxArt, model: voxModel, fromArt: voxFromArt, draw: voxDraw, paint: voxPaint };
+
 /* ---- boot.js ---- */
 /* <piix-pal pal="bitbug" do="crawl" on="#title" scale="4" hue="0">
  * Put it inside the element it should live on, or point at one with on="css selector".
@@ -1663,10 +1954,10 @@ Object.assign(Piixpal, {
   clear: () => document.querySelectorAll(['piix-pal', 'piix-sprite', ...Object.values(ELEMENTS)].join()).forEach(e => e.remove())
 });
 
-Piixpal._k = { reduceMQ, reduced, clamp, rnd, chance, pick, lerp, now, hexRGBA, ptr, ptrDist, scroll, subs, raf, frame, sub, unsub, rectOf, docW, boxOf, pin, areaOf, onScreen, surfaceAt, LAYER_CSS, layer, origin, getLayer, layerOrigin, SPRITES, bake, defineSprite, baked, ACTORS, shout, Actor, recruit, BEHAVIORS, defineBehavior, Piixpal, art, lastT, layerRoot, ICON_PAL, ICONS, DIGITS, numberIcon, iconCache, iconPal, bakeIcon, UI_INK, UI_PAPER, UI_FONT, UI_MONO, UI_CSS, uiHost, uiRoot, uiStyles, uiStyle, uiEl, uiIcon, uiCard, uiPlace, uiAt, uiClose, uiAnnounce, uiShadow, uiLive, measureCtx, glyphTop, textProfile, segAt, LAND, platCache, TEXTY, surfaceOf, platforms, drag, BLIP, CROWD_COLORS, PiixCrowdElement, FIGURES, defineFigure, mixHex, figurePalette, bakeFigure, HEAD, PiixSpriteElement, RENDERS, lum, BAYER, ASCII, TEXTURES, BIG, PiixTypeElement, CELL_SHAPES, PiixPalElement, define, ELEMENTS, add, autoAttach, SCRIPT, start };
+Piixpal._k = { reduceMQ, reduced, clamp, rnd, chance, pick, lerp, now, hexRGBA, ptr, ptrDist, scroll, subs, raf, frame, sub, unsub, rectOf, docW, boxOf, pin, areaOf, onScreen, surfaceAt, LAYER_CSS, layer, origin, getLayer, layerOrigin, SPRITES, bake, defineSprite, baked, ACTORS, shout, Actor, recruit, BEHAVIORS, defineBehavior, Piixpal, art, lastT, layerRoot, ICON_PAL, ICONS, DIGITS, numberIcon, iconCache, iconPal, bakeIcon, UI_INK, UI_PAPER, UI_FONT, UI_MONO, UI_CSS, uiHost, uiRoot, uiStyles, uiStyle, uiEl, uiIcon, uiCard, uiPlace, uiAt, uiClose, uiAnnounce, uiShadow, uiLive, measureCtx, glyphTop, textProfile, segAt, LAND, platCache, TEXTY, surfaceOf, platforms, drag, BLIP, CROWD_COLORS, PiixCrowdElement, FIGURES, defineFigure, mixHex, figurePalette, bakeFigure, HEAD, PiixSpriteElement, RENDERS, lum, BAYER, ASCII, TEXTURES, BIG, PiixTypeElement, CELL_SHAPES, VOX_LOOKS, VOX_DIRS, voxKey, voxNorm, voxArt, voxModel, VOX_MODELS, voxFromArt, voxCells, voxDraw, VOX_BUF, voxBuf, VOX_BAYER, VOX_RAMP, voxPaint, VoxStage, PiixPalElement, define, ELEMENTS, add, autoAttach, SCRIPT, start };
 return Piixpal._k;
 })();
-const { reduceMQ, reduced, clamp, rnd, chance, pick, lerp, now, hexRGBA, ptr, ptrDist, scroll, subs, raf, frame, sub, unsub, rectOf, docW, boxOf, pin, areaOf, onScreen, surfaceAt, LAYER_CSS, layer, origin, getLayer, layerOrigin, SPRITES, bake, defineSprite, baked, ACTORS, shout, Actor, recruit, BEHAVIORS, defineBehavior, Piixpal, art, lastT, layerRoot, ICON_PAL, ICONS, DIGITS, numberIcon, iconCache, iconPal, bakeIcon, UI_INK, UI_PAPER, UI_FONT, UI_MONO, UI_CSS, uiHost, uiRoot, uiStyles, uiStyle, uiEl, uiIcon, uiCard, uiPlace, uiAt, uiClose, uiAnnounce, uiShadow, uiLive, measureCtx, glyphTop, textProfile, segAt, LAND, platCache, TEXTY, surfaceOf, platforms, drag, BLIP, CROWD_COLORS, PiixCrowdElement, FIGURES, defineFigure, mixHex, figurePalette, bakeFigure, HEAD, PiixSpriteElement, RENDERS, lum, BAYER, ASCII, TEXTURES, BIG, PiixTypeElement, CELL_SHAPES, PiixPalElement, define, ELEMENTS, add, autoAttach, SCRIPT, start } = K;
+const { reduceMQ, reduced, clamp, rnd, chance, pick, lerp, now, hexRGBA, ptr, ptrDist, scroll, subs, raf, frame, sub, unsub, rectOf, docW, boxOf, pin, areaOf, onScreen, surfaceAt, LAYER_CSS, layer, origin, getLayer, layerOrigin, SPRITES, bake, defineSprite, baked, ACTORS, shout, Actor, recruit, BEHAVIORS, defineBehavior, Piixpal, art, lastT, layerRoot, ICON_PAL, ICONS, DIGITS, numberIcon, iconCache, iconPal, bakeIcon, UI_INK, UI_PAPER, UI_FONT, UI_MONO, UI_CSS, uiHost, uiRoot, uiStyles, uiStyle, uiEl, uiIcon, uiCard, uiPlace, uiAt, uiClose, uiAnnounce, uiShadow, uiLive, measureCtx, glyphTop, textProfile, segAt, LAND, platCache, TEXTY, surfaceOf, platforms, drag, BLIP, CROWD_COLORS, PiixCrowdElement, FIGURES, defineFigure, mixHex, figurePalette, bakeFigure, HEAD, PiixSpriteElement, RENDERS, lum, BAYER, ASCII, TEXTURES, BIG, PiixTypeElement, CELL_SHAPES, VOX_LOOKS, VOX_DIRS, voxKey, voxNorm, voxArt, voxModel, VOX_MODELS, voxFromArt, voxCells, voxDraw, VOX_BUF, voxBuf, VOX_BAYER, VOX_RAMP, voxPaint, VoxStage, PiixPalElement, define, ELEMENTS, add, autoAttach, SCRIPT, start } = K;
 
 /* ---- behaviors/beeline.js ---- */
 /* beeline: a little line of worker bees buzzing round their element. Come close and
@@ -10219,6 +10510,449 @@ class PiixWeatherElement extends HTMLElement {
 }
 define('piix-weather', PiixWeatherElement);
 ELEMENTS.weather = 'piix-weather';
+
+/* ---- studio/card.js ---- */
+/* CARD: a holographic trading card for any pal.   @component card
+ *
+ *   <piix-card pal="frog"></piix-card>
+ *
+ * The card tilts toward your pointer, a rainbow foil slides across it as it turns, and the pal stands
+ * in 3D a little in front of the card, slowly turning. Drag the pal to spin it, tap to make it hop.
+ * Every pal and sprite has a number, a type and a line about what it does.
+ *
+ *   pal      any pal or sprite name                                         default: bitbug
+ *   rarity   common | rare | holo  (holo has the foil)                        default: holo
+ *   look     how the pal is drawn: glossy | clay | toon | wire | holo | halftone | dither | ascii
+ *   size     card width in px; it is 1.4 times as tall                       default: 240
+ *   color    the card's colour                                              default: from the pal */
+const CARD_DOES = {
+  crawl: 'Crawls along the tops of your headings and climbs over the letters.', bounce: 'Bounces on whatever is underneath it.',
+  lounge: 'Finds a paragraph and naps on it.', perch: 'Perches on your buttons and pecks at them.', toss: 'Throw it across the page. It bounces back.',
+  follow: 'Follows your pointer around, at a polite distance.', peek: 'Peeks over the edge of things and hides when you look.',
+  float: 'Floats up the page. Poke it and it pops.', climb: 'Climbs the sides of your boxes.', snap: 'Snaps at your cursor when it gets close.',
+  slide: 'Slides along your text like it is ice.', mimic: 'Copies what your pointer does.', pop: 'Pops up out of the ground to see what you are doing.',
+  mind: 'Reads your page. Gets annoyed if you scroll too fast.', drop: 'Parachutes onto the page and waves.', guard: 'Covers its eyes while you type a password.',
+  launch: 'Launches when you scroll back to the top.', sweep: 'Sweeps the bottom of your page clean.', signal: 'Shows how good your connection is.',
+  progress: 'Runs along the top as you scroll down.', creep: 'Creeps along slowly, hides in its shell.', select: 'Snips around whatever text you select.',
+  type: 'Types along when you type.', hang: 'Hangs from a thread and wiggles.', captcha: 'Gets nervous when you are a robot.',
+  player: 'Turns your page into a platformer.', courier: 'Delivers your notifications by air.', cord: 'A pull chain for dark mode.',
+  pet: 'Hatches into a pet that belongs to each visitor.', munch: 'Eats the crumbs of your page.', mood: 'Shows the mood of whatever you are typing.'
+};
+class PiixCardElement extends VoxStage {
+  constructor() { super(); this._defSize = 240; this._aspect = 1.4; this._defSpin = 4; this._defTilt = 14; }
+  _info() {
+    const n = this.palName, s = SPRITES[n], f = FIGURES[n];
+    const all = [...Object.keys(SPRITES).filter(k => k[0] !== '_'), ...Object.keys(FIGURES)], no = Math.max(1, all.indexOf(n) + 1);
+    const type = s ? s.does || 'pal' : 'sprite';
+    const line = f ? (f.tag || '').replace(/^A |^An /, m => m) : CARD_DOES[type] || 'Lives somewhere on your website.';
+    /* its colour: the commonest colour in its art that isn't nearly black or white */
+    const art = voxArt(n), count = {};
+    if (art) for (const r of art.rows) for (const c of r) if (art.palette[c]) count[c] = (count[c] || 0) + 1;
+    let accent = '#c6f432', best = 0;
+    for (const c in count) { const [r, g, b] = hexRGBA(art.palette[c]), l = (r * .3 + g * .59 + b * .11) / 255; if (l > .22 && l < .93 && count[c] > best) { best = count[c]; accent = art.palette[c]; } }
+    return { name: n.replace(/^./, c => c.toUpperCase()), no: String(no).padStart(3, '0'), total: all.length, type, line, accent: this.getAttribute('color') || accent };
+  }
+  _label() { const i = this._info(); return `${i.name} trading card, number ${i.no}: ${i.line}`; }
+  _html(w, h) {
+    const i = this._info(), r = this.getAttribute('rarity') || 'holo', stars = { common: 1, rare: 2, holo: 3 }[r] || 3;
+    this._cvW = Math.round(w * .82); this._cvH = Math.round(h * .5);
+    const e = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    return `<div class="p"><div class="c" part="card" style="--a:${e(i.accent)}">
+<div class="in"><i class="sun"></i><i class="dots"></i></div>
+<div class="top"><b>${e(i.name)}</b><span>#${i.no}</span></div>
+<div class="art"><canvas part="canvas"></canvas></div>
+<div class="panel"><div class="type">${e(i.type)}<span>${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</span></div><p>${e(i.line)}</p></div>
+${r === 'holo' ? '<i class="foil"></i>' : ''}<i class="glare"></i></div></div>`;
+  }
+  _css(w, h) {
+    const u = w / 240;
+    return `.p{perspective:${900 * u}px;width:${w}px;height:${h}px}
+.c{position:relative;width:100%;height:100%;border-radius:${16 * u}px;background:#17121f;transform-style:preserve-3d;box-shadow:0 ${20 * u}px ${44 * u}px -${14 * u}px rgba(23,18,31,.55);--mx:50%;--my:50%;--fo:.4}
+.in{position:absolute;inset:${9 * u}px;border-radius:${10 * u}px;overflow:hidden;background:var(--a)}
+.sun{position:absolute;left:50%;top:38%;width:${h * 2}px;height:${h * 2}px;margin:-${h}px 0 0 -${h}px;background:repeating-conic-gradient(rgba(255,255,255,.24) 0 7deg,transparent 7deg 14deg);animation:sp 60s linear infinite}
+@keyframes sp{to{transform:rotate(1turn)}}@media (prefers-reduced-motion:reduce){.sun{animation:none}}
+.dots{position:absolute;inset:0;background-image:radial-gradient(rgba(23,18,31,.26) ${1.1 * u}px,transparent ${1.5 * u}px);background-size:${7 * u}px ${7 * u}px;-webkit-mask:linear-gradient(transparent 25%,#000 70%);mask:linear-gradient(transparent 25%,#000 70%)}
+.top{position:absolute;left:${20 * u}px;right:${20 * u}px;top:${18 * u}px;display:flex;justify-content:space-between;align-items:baseline;transform:translateZ(${10 * u}px);font:800 ${21 * u}px/1 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-.02em;color:#17121f}
+.top span{font:600 ${11 * u}px ui-monospace,Menlo,monospace;opacity:.7}
+.art{position:absolute;left:${(w - this._cvW) / 2}px;top:${h * .1}px;transform:translateZ(${42 * u}px);pointer-events:none}
+.panel{position:absolute;left:${16 * u}px;right:${16 * u}px;bottom:${16 * u}px;height:${h * .3}px;box-sizing:border-box;padding:${11 * u}px ${12 * u}px;border-radius:${10 * u}px;background:#fffdf7;transform:translateZ(${16 * u}px);box-shadow:0 ${3 * u}px 0 #17121f}
+.type{display:flex;justify-content:space-between;font:700 ${10 * u}px/1 ui-monospace,Menlo,monospace;text-transform:uppercase;letter-spacing:.08em;color:#6c6477}
+.type span{color:#17121f;letter-spacing:.1em}
+.panel p{margin:${7 * u}px 0 0;font:500 ${12.5 * u}px/1.35 "Bricolage Grotesque",system-ui,sans-serif;color:#17121f}
+.foil,.glare{position:absolute;inset:0;border-radius:inherit;pointer-events:none;transform:translateZ(${44 * u}px)}
+.foil{background:linear-gradient(115deg,transparent 22%,rgba(255,0,170,.55) 36%,rgba(0,255,234,.5) 48%,rgba(255,240,0,.5) 60%,transparent 74%);background-size:260% 260%;background-position:var(--mx) var(--my);mix-blend-mode:color-dodge;opacity:var(--fo)}
+.glare{background:radial-gradient(circle at var(--mx) var(--my),rgba(255,255,255,.6),transparent 46%);mix-blend-mode:overlay}`;
+  }
+  _setup() { this._card = this.shadowRoot.querySelector('.c'); this._tilt = [0, 0]; }
+  _draw(dt, t) {
+    /* the tilt: toward the pointer while it's over the card, a slow sway otherwise */
+    const r = this.getBoundingClientRect(), px = (ptr.cx - r.left) / r.width, py = (ptr.cy - r.top) / r.height;
+    const over = px > -.1 && px < 1.1 && py > -.1 && py < 1.1, R = reduced();
+    const want = over ? [(.5 - py) * 22, (px - .5) * 26] : R ? [0, 0] : [Math.sin(t / 1700) * 4, Math.sin(t / 2300) * 8];
+    this._tilt[0] = lerp(this._tilt[0], want[0], Math.min(1, dt * 8)); this._tilt[1] = lerp(this._tilt[1], want[1], Math.min(1, dt * 8));
+    const mx = over ? px * 100 : 50 + this._tilt[1] * 3, my = over ? py * 100 : 50 - this._tilt[0] * 3;
+    const c = this._card;
+    c.style.transform = `rotateX(${this._tilt[0].toFixed(2)}deg) rotateY(${this._tilt[1].toFixed(2)}deg)`;
+    c.style.setProperty('--mx', mx.toFixed(1) + '%'); c.style.setProperty('--my', my.toFixed(1) + '%'); c.style.setProperty('--fo', over ? .8 : .38);
+    /* the pal */
+    const g = this._g, w = this._cv.width, h = this._cv.height, first = voxArt(this.palName);
+    if (!first) return;
+    const art = R ? first : voxArt(this.palName, null, Math.floor(t / 1000 * first.fps));
+    const m = voxFromArt(art, 3), s = Math.min(w, h) * .8 / Math.max(Math.hypot(m.w, m.d), m.h);
+    g.clearRect(0, 0, w, h);
+    voxPaint(g, m, { yaw: this._yaw + this._tilt[1] * .02, pitch: this._pitch - this._tilt[0] * .012, s, x: w / 2, y: h / 2 + this._hop(t), light: this._L, look: this.look, dpr: this._dpr, t, persp: .012 });
+  }
+}
+define('piix-card', PiixCardElement);
+ELEMENTS.card = 'piix-card';
+
+/* ---- studio/globe.js ---- */
+/* GLOBE: a pal in a snow globe. Shake it.   @component globe
+ *
+ *   <piix-globe pal="penguin"></piix-globe>
+ *
+ * A glass dome on a little stand with a 3D pal inside, standing on a snowdrift. Drag it about or tap
+ * it to shake it: the snow flies up and drifts back down round the pal, and settles again.
+ *
+ *   pal     any pal or sprite name                      default: penguin
+ *   sky     night | dusk | day                          default: night
+ *   snow    how many flakes, 20–300                     default: 140
+ *   size    width in px                                 default: 220
+ *   look    how the pal is drawn                        default: glossy
+ *
+ *   el.shake()   shake it from code */
+const GLOBE_SKY = { night: ['#2a1f5c', '#5b3fa8'], dusk: ['#ff8a5c', '#6b4cff'], day: ['#7fd0ff', '#dff4ff'] };
+class PiixGlobeElement extends VoxStage {
+  constructor() { super(); this._defSize = 220; this._aspect = 1.18; this._defSpin = 2; this._defTilt = 12; this._defPal = 'penguin'; }
+  _label() { return `${this.palName} in a snow globe`; }
+  _setup() {
+    const n = clamp(+this.getAttribute('snow') || 140, 20, 300);
+    this._flakes = [...Array(n)].map((_, i) => ({ x: Math.random() * 1.6 - .8, y: Math.random() * 1.4 - .8, vx: 0, vy: 0, z: .5 + Math.random(), rest: false }));
+    this.shake(.6);
+  }
+  shake(k = 1) {
+    for (const f of this._flakes || []) { f.rest = false; f.vx += (Math.random() - .5) * 2.4 * k; f.vy -= Math.random() * 2.2 * k; }
+    this._hopAt = now();
+  }
+  _poke() { this.shake(1); }
+  _shake(dx, dy) { for (const f of this._flakes) { f.rest = false; f.vx += dx * .01 + (Math.random() - .5) * .06; f.vy += dy * .01 - Math.random() * .05; } }
+  _draw(dt, t) {
+    const g = this._g, w = this._cv.width, h = this._cv.height, dpr = this._dpr;
+    const r = w * .41, cx = w / 2, cy = r + w * .06, ground = y => .58 - .07 * Math.cos(y * 2.2);
+    const sky = GLOBE_SKY[this.getAttribute('sky')] || GLOBE_SKY.night;
+    g.clearRect(0, 0, w, h);
+    /* the stand */
+    const by = cy + r * .78, bw = r * 1.02;
+    g.fillStyle = '#17121f';
+    g.beginPath(); g.moveTo(cx - bw, by); g.lineTo(cx + bw, by); g.lineTo(cx + bw * 1.18, h - w * .03); g.lineTo(cx - bw * 1.18, h - w * .03); g.closePath(); g.fill();
+    g.fillStyle = '#c6f432'; g.fillRect(cx - bw * 1.08, by + (h - w * .03 - by) * .38, bw * 2.16, 3 * dpr);
+    g.fillStyle = '#fffdf7'; g.font = `700 ${w * .05}px ui-monospace,Menlo,monospace`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(this.palName.toUpperCase(), cx, by + (h - w * .03 - by) * .7);
+    /* inside the glass */
+    g.save(); g.beginPath(); g.arc(cx, cy, r, 0, 6.283); g.clip();
+    const bg = g.createLinearGradient(0, cy - r, 0, cy + r); bg.addColorStop(0, sky[0]); bg.addColorStop(1, sky[1]);
+    g.fillStyle = bg; g.fillRect(cx - r, cy - r, r * 2, r * 2);
+    g.fillStyle = 'rgba(255,255,255,.6)';
+    for (let i = 0; i < 18; i++) { const a = Math.sin(i * 91.7) * 43758.5, b = Math.sin(i * 17.3) * 9137.1; g.fillRect(cx + ((a - Math.floor(a)) - .5) * r * 1.6, cy - r * .9 + (b - Math.floor(b)) * r * .9, dpr * 1.5, dpr * 1.5); }
+    /* the drift */
+    g.fillStyle = '#f4f8ff'; g.beginPath(); g.moveTo(cx - r, cy + r);
+    for (let x = -1; x <= 1.001; x += .05) g.lineTo(cx + x * r, cy + ground(x) * r);
+    g.lineTo(cx + r, cy + r); g.closePath(); g.fill();
+    /* the pal, standing on it */
+    const art = voxArt(this.palName, null, reduced() ? 0 : Math.floor(t / 1000 * (voxArt(this.palName)?.fps || 4)));
+    if (art) {
+      const m = voxFromArt(art, 3), s = r * .95 / Math.max(Math.hypot(m.w, m.d), m.h);
+      const foot = cy + ground(0) * r + s * .4, y = foot - (m.bottom - m.cy) * s * Math.cos(this._pitch) + this._hop(t) * .6;
+      voxPaint(g, m, { yaw: this._yaw, pitch: this._pitch, s, x: cx, y, light: this._L, look: this.look, dpr, t, persp: .01 });
+    }
+    /* the snow: falls, drifts, comes to rest on the drift until the next shake */
+    const step = Math.min(dt, .05);
+    for (const f of this._flakes) {
+      if (!f.rest) {
+        f.vy += .28 * step; f.vx *= 1 - 1.8 * step; f.vy *= 1 - 1.4 * step;
+        f.vx += Math.sin(t / 700 + f.z * 9) * .02 * step;
+        f.x += f.vx * step; f.y += f.vy * step;
+        const d = Math.hypot(f.x, f.y);
+        if (d > .96) { f.x *= .96 / d; f.y *= .96 / d; f.vx *= -.3; f.vy *= -.3; }
+        if (f.y > ground(f.x) - .01) { f.y = ground(f.x) - .01; f.rest = f.vy > 0; f.vx = f.vy = 0; }
+      }
+      g.fillStyle = `rgba(255,255,255,${.65 + f.z * .25})`;
+      const z = (1.4 + f.z * 1.6) * dpr;
+      g.fillRect(cx + f.x * r - z / 2, cy + f.y * r - z / 2, z, z);
+    }
+    g.restore();
+    /* the glass: a tint at the rim and two reflections */
+    const rim = g.createRadialGradient(cx, cy, r * .7, cx, cy, r);
+    rim.addColorStop(0, 'rgba(200,235,255,0)'); rim.addColorStop(1, 'rgba(200,235,255,.32)');
+    g.fillStyle = rim; g.beginPath(); g.arc(cx, cy, r, 0, 6.283); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = r * .045; g.lineCap = 'round';
+    g.beginPath(); g.arc(cx, cy, r * .86, Math.PI * 1.08, Math.PI * 1.38); g.stroke();
+    g.beginPath(); g.arc(cx, cy, r * .86, Math.PI * 1.46, Math.PI * 1.52); g.stroke();
+    g.strokeStyle = 'rgba(23,18,31,.85)'; g.lineWidth = 2.5 * dpr; g.beginPath(); g.arc(cx, cy, r, 0, 6.283); g.stroke();
+  }
+}
+define('piix-globe', PiixGlobeElement);
+ELEMENTS.globe = 'piix-globe';
+
+/* ---- studio/holo.js ---- */
+/* HOLO: a pal projected as a hologram.   @component holo
+ *
+ *   <piix-holo pal="astronaut"></piix-holo>
+ *
+ * A little projector puck throws a cone of light, and the pal hangs in it in cyan scanlines,
+ * turning slowly, bobbing, flickering, and glitching sideways now and then. Drag to spin it.
+ *
+ *   pal     any pal or sprite name                       default: astronaut
+ *   color   the light: cyan | lime | pink | amber         default: cyan
+ *   size    width in px                                   default: 220 */
+const HOLO_TINT = { cyan: 0, lime: -95, pink: 130, amber: 175 };
+class PiixHoloElement extends VoxStage {
+  constructor() { super(); this._defSize = 220; this._aspect = 1.25; this._defSpin = 5; this._defTilt = 10; this._defPal = 'astronaut'; this._defLook = 'holo'; }
+  _label() { return `${this.palName} as a hologram`; }
+  _css() { const hue = HOLO_TINT[this.getAttribute('color')] || 0; return hue ? `canvas{filter:hue-rotate(${hue}deg) saturate(1.2)}` : ''; }
+  _draw(dt, t) {
+    const g = this._g, w = this._cv.width, h = this._cv.height, dpr = this._dpr;
+    const cx = w / 2, base = h * .86, rx = w * .3, ry = w * .07;
+    g.clearRect(0, 0, w, h);
+    /* the beam: a soft cone from the puck up to the figure */
+    g.save(); g.globalCompositeOperation = 'lighter';
+    const cone = g.createLinearGradient(0, base, 0, h * .12);
+    cone.addColorStop(0, 'rgba(88,232,255,.42)'); cone.addColorStop(1, 'rgba(88,232,255,0)');
+    g.fillStyle = cone; g.beginPath(); g.moveTo(cx - rx * .8, base); g.lineTo(cx + rx * .8, base); g.lineTo(cx + w * .46, h * .12); g.lineTo(cx - w * .46, h * .12); g.closePath(); g.fill();
+    /* motes drifting up the beam */
+    for (let i = 0; i < 16; i++) {
+      const a = Math.sin(i * 12.98) * 43758.5, f = a - Math.floor(a), k = ((reduced() ? 0 : t / 2600) + f) % 1, y = base - k * (base - h * .14);
+      g.fillStyle = `rgba(150,240,255,${.7 * (1 - k)})`; g.fillRect(cx + (f - .5) * rx * 1.4 * (1 + k * .9), y, 2 * dpr, 2 * dpr);
+    }
+    g.restore();
+    /* the figure */
+    const art = voxArt(this.palName, null, reduced() ? 0 : Math.floor(t / 1000 * (voxArt(this.palName)?.fps || 4)));
+    if (art) {
+      const m = voxFromArt(art, 3), s = Math.min(w, h * .7) * .72 / Math.max(Math.hypot(m.w, m.d), m.h);
+      const bob = reduced() ? 0 : Math.sin(t / 900) * 5 * dpr;
+      voxPaint(g, m, { yaw: this._yaw, pitch: this._pitch, s, x: cx, y: h * .44 + bob + this._hop(t), light: [-.3, -.6, .8], look: this.look, dpr, t, persp: .01 });
+    }
+    /* the puck */
+    g.fillStyle = '#17121f'; g.beginPath(); g.ellipse(cx, base + ry * .9, rx * 1.12, ry * 1.25, 0, 0, 6.283); g.fill();
+    g.fillStyle = '#2b2436'; g.beginPath(); g.ellipse(cx, base, rx * 1.12, ry, 0, 0, 6.283); g.fill();
+    const lens = g.createRadialGradient(cx, base, 0, cx, base, rx * .8);
+    lens.addColorStop(0, 'rgba(160,245,255,.95)'); lens.addColorStop(.5, 'rgba(88,232,255,.55)'); lens.addColorStop(1, 'rgba(88,232,255,0)');
+    g.fillStyle = lens; g.beginPath(); g.ellipse(cx, base, rx * .8, ry * .62, 0, 0, 6.283); g.fill();
+    for (let i = 0; i < 5; i++) { const a = Math.PI * (.15 + i * .175); g.fillStyle = i === Math.floor(t / 400) % 5 ? '#c6f432' : '#4a4258'; g.fillRect(cx + Math.cos(a) * rx * 1.02 - dpr * 2, base + ry * .6 + Math.sin(a) * ry * .55, dpr * 4, dpr * 3); }
+  }
+}
+define('piix-holo', PiixHoloElement);
+ELEMENTS.holo = 'piix-holo';
+
+/* ---- studio/planet.js ---- */
+/* PLANET: a tiny voxel world with pals walking round it.   @component planet
+ *
+ *   <piix-planet pals="bitbug,frog,penguin"></piix-planet>
+ *
+ * Seas, beaches, grass, hills with snow on top and little trees, all in voxels, with a soft
+ * atmosphere round the edge. The pals walk round it and disappear over the horizon. Drag to spin
+ * it, the light follows your pointer, tap it for a hop.
+ *
+ *   pals    comma-separated pal names                 default: bitbug,frog,penguin
+ *   seed    a number: a different world for each      default: 7
+ *   size    width in px                               default: 260
+ *   spin    turns per minute when idle                default: 3
+ *   look    glossy | clay | toon | wire | holo | halftone | dither | ascii   default: glossy */
+class PiixPlanetElement extends VoxStage {
+  constructor() { super(); this._defSize = 260; this._defSpin = 3; this._defTilt = 18; this._needsPal = false; }
+  _label() { return 'A tiny voxel planet with pals walking round it'; }
+  _setup() {
+    const R = 10, seed = +this.getAttribute('seed') || 7;
+    /* smooth noise on the sphere: a few waves in different directions */
+    const waves = [...Array(7)].map((_, i) => { const a = Math.sin(seed * 9.1 + i * 3.7) * 43758.5; const r = a - Math.floor(a), b = Math.sin(seed * 4.3 + i * 7.9) * 2e4; const q = b - Math.floor(b); return [Math.cos(r * 6.283) * Math.sin(q * 3.14), Math.cos(q * 3.14), Math.sin(r * 6.283) * Math.sin(q * 3.14), 1.4 + i * .55, r * 6.283]; });
+    const height = (x, y, z) => waves.reduce((a, w) => a + Math.sin((x * w[0] + y * w[1] + z * w[2]) * w[3] / R * 2.2 + w[4]) / (1 + w[3] * .4), 0);
+    const C = { deep: [47, 151, 214], sea: [88, 200, 255], sand: [255, 217, 138], grass: [123, 214, 58], grass2: [92, 184, 45], rock: [154, 143, 122], snow: [255, 255, 255], trunk: [138, 90, 52], leaf: [61, 158, 74] };
+    /* sea level and hill heights by percentile, so every seed gets about half land */
+    const hs = [];
+    for (let i = 0; i < 600; i++) { const z = 1 - 2 * (i + .5) / 600, rr = Math.sqrt(1 - z * z), a = i * 2.399963; hs.push(height(Math.cos(a) * rr, z, Math.sin(a) * rr)); }
+    hs.sort((a, b) => a - b);
+    const q = p => hs[Math.floor(p * (hs.length - 1))], SEA = q(.48), SAND = q(.55), HILL = q(.8), PEAK = q(.93), DEEP = q(.25);
+    const vox = [];
+    for (let x = -R - 3; x <= R + 3; x++) for (let y = -R - 3; y <= R + 3; y++) for (let z = -R - 3; z <= R + 3; z++) {
+      const d = Math.hypot(x, y, z);
+      if (d > R + 2.5 || d < R - 1.6) continue;
+      const hgt = height(x / d, y / d, z / d), land = hgt > SEA;
+      /* the surface sits at R; land rises a step, hills two */
+      const top = R + (hgt > PEAK ? 2 : hgt > HILL ? 1 : 0);
+      if (d > top + .5) continue;
+      let c;
+      if (!land) c = d > R - .5 ? (hgt > DEEP ? C.sea : C.deep) : C.deep;
+      else if (hgt < SAND) c = C.sand;
+      else if (hgt > PEAK && d > top - .5) c = C.snow;
+      else if (hgt > HILL) c = C.rock;
+      else c = (x + y + z) & 1 ? C.grass : C.grass2;
+      vox.push([x, y, z, c, 0]);
+    }
+    /* trees: a trunk and a puff of leaves, pointing straight out from the ground */
+    for (let i = 0; i < 26; i++) {
+      const u = Math.sin(seed * 13 + i * 12.9898) * 43758.5, v = Math.sin(seed * 7 + i * 78.233) * 12345.6;
+      const th = (u - Math.floor(u)) * 6.283, ph = Math.acos(2 * (v - Math.floor(v)) - 1), n = [Math.sin(ph) * Math.cos(th), Math.cos(ph), Math.sin(ph) * Math.sin(th)];
+      const hgt = height(...n);
+      if (hgt < SAND || hgt > HILL) continue;
+      const base = R;
+      for (let k = 1; k <= 2; k++) vox.push([...n.map(c => Math.round(c * (base + k))), C.trunk, 0]);
+      const top = n.map(c => c * (base + 3.2));
+      for (const [a, b, c] of [[0, 0, 0], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) vox.push([Math.round(top[0] + a), Math.round(top[1] + b), Math.round(top[2] + c), C.leaf, 0]);
+    }
+    const seen = new Set();
+    this._model = voxModel(vox.filter(v => { const k = voxKey(v[0], v[1], v[2]); if (seen.has(k)) return false; seen.add(k); return true; }));
+    this._R = R;
+    this._walkers = (this.getAttribute('pals') || 'bitbug,frog,penguin').split(',').map(s => s.trim()).filter(n => SPRITES[n]).slice(0, 8)
+      .map((n, i) => ({ n, lat: (i % 2 ? -1 : 1) * (.15 + i * .18), speed: .32 + i * .07, off: i * 2.1 }));
+  }
+  _draw(dt, t) {
+    const g = this._g, w = this._cv.width, h = this._cv.height, m = this._model, R = this._R;
+    const s = Math.min(w, h) * .4 / (R + 2.5), cx = w / 2, cy = h / 2 + this._hop(t);
+    g.clearRect(0, 0, w, h);
+    /* the atmosphere: a soft halo behind it */
+    const halo = g.createRadialGradient(cx, cy, R * s * .9, cx, cy, R * s * 1.5);
+    halo.addColorStop(0, 'rgba(160,226,255,.55)'); halo.addColorStop(1, 'rgba(160,226,255,0)');
+    g.fillStyle = halo; g.fillRect(0, 0, w, h);
+    const o = { yaw: this._yaw, pitch: this._pitch, s, x: cx, y: cy, light: this._L, look: this.look, dpr: this._dpr, t };
+    voxPaint(g, m, o);
+    /* the walkers: a point on the sphere, turned like the planet, drawn upright from the ground if it's on our side */
+    const cyw = Math.cos(o.yaw), syw = Math.sin(o.yaw), cp = Math.cos(o.pitch), sp = Math.sin(o.pitch);
+    const rot = (x, y, z) => { const x1 = x * cyw + z * syw, z1 = -x * syw + z * cyw; return [x1, y * cp - z1 * sp, y * sp + z1 * cp]; };
+    for (const wk of this._walkers) {
+      const lon = (reduced() ? 0 : t / 1000) * wk.speed + wk.off, la = wk.lat;
+      const n = [Math.cos(la) * Math.cos(lon), Math.sin(la), Math.cos(la) * Math.sin(lon)], p = rot(...n.map(c => c * (R + 1.5)));
+      if (p[2] < 1) continue;
+      const up = rot(...n), sp2 = SPRITES[wk.n], frames = baked(sp2), clip = frames.walk || frames[Object.keys(frames)[0]];
+      const img = clip[Math.floor(t / 1000 * 8) % clip.length], k = s * .36;
+      g.save(); g.translate(cx + p[0] * s, cy + p[1] * s); g.rotate(Math.atan2(up[0], -up[1]));
+      const dir = rot(-Math.sin(lon), 0, Math.cos(lon));
+      if (dir[0] < 0) g.scale(-1, 1);
+      g.globalAlpha = Math.min(1, (p[2] - 1) / 3);
+      g.imageSmoothingEnabled = false; g.drawImage(img, -sp2.w * k / 2, -sp2.h * k, sp2.w * k, sp2.h * k);
+      g.restore();
+    }
+  }
+}
+define('piix-planet', PiixPlanetElement);
+ELEMENTS.planet = 'piix-planet';
+
+/* ---- studio/room.js ---- */
+/* ROOM: a little isometric voxel diorama with a pal living in it.   @component room
+ *
+ *   <piix-room scene="desk"></piix-room>
+ *
+ * A tiny room built out of voxels: a desk with a glowing monitor, a pond island, a bedroom at night.
+ * It leans toward your pointer, the light follows it, and things that glow keep glowing. Drag to
+ * turn it round a little. Lovely for empty states, 404 pages and "about me" sections.
+ *
+ *   scene   desk | pond | night                          default: desk
+ *   pal     who lives there                              default: termi, frog or kitty
+ *   size    width in px                                  default: 300
+ *   look    glossy | clay | toon | wire | halftone | dither | ascii   default: clay */
+const ROOM_SCENES = {
+  desk: { pal: 'termi', walls: true, amb: .5, build(b) {
+    for (let x = 0; x < 20; x++) for (let z = 0; z < 20; z++) b(x, x, 0, 1, z, z, x % 4 === 0 ? [176, 118, 66] : [201, 138, 78]);
+    b(0, 19, -14, -1, 0, 0, [243, 238, 227]); b(0, 0, -14, -1, 1, 19, [230, 224, 211]);
+    b(11, 16, -12, -7, 1, 1, [126, 208, 255], 1); b(10, 17, -13, -13, 1, 1, [255, 253, 247]); b(10, 17, -6, -6, 1, 1, [255, 253, 247]); b(13, 13, -12, -7, 1, 1, [255, 253, 247]);
+    b(2, 12, -6, -6, 2, 7, [122, 74, 42]); b(2, 2, -5, -1, 2, 2, [92, 54, 30]); b(12, 12, -5, -1, 2, 2, [92, 54, 30]); b(2, 2, -5, -1, 7, 7, [92, 54, 30]); b(12, 12, -5, -1, 7, 7, [92, 54, 30]);
+    b(4, 9, -11, -7, 3, 3, [43, 36, 54]); b(5, 8, -10, -8, 4, 4, [198, 244, 50], 1); b(6, 7, -7, -7, 4, 5, [43, 36, 54]);
+    b(10, 11, -8, -7, 3, 4, [255, 107, 74]); b(10, 11, -10, -9, 3, 4, [61, 158, 74]); b(11, 11, -11, -11, 4, 4, [61, 158, 74]);
+    b(6, 14, 0, 0, 10, 16, [107, 76, 255]); b(7, 13, 0, 0, 11, 15, [150, 126, 255]);
+    b(16, 18, -4, -1, 3, 5, [255, 210, 63]); b(16, 18, -5, -5, 3, 5, [255, 230, 140]);
+  }, at: [6, 0, 13] },
+  pond: { pal: 'frog', walls: false, amb: .52, build(b) {
+    for (let x = 0; x < 20; x++) for (let z = 0; z < 20; z++) {
+      const d = Math.hypot(x - 9.5, z - 9.5); if (d > 10.2) continue;
+      const pond = Math.hypot(x - 7, z - 8) < 4.6;
+      b(x, x, 0, 0, z, z, pond ? [88, 200, 255] : (x + z) % 3 ? [123, 214, 58] : [92, 184, 45], pond ? 1 : 0);
+      b(x, x, 1, 3, z, z, d > 9.2 ? [138, 90, 52] : pond ? [47, 151, 214] : [158, 108, 64]);
+    }
+    b(5, 7, -1, -1, 9, 10, [37, 184, 154]); b(9, 10, -1, -1, 6, 6, [37, 184, 154]);
+    b(14, 15, -2, -1, 13, 14, [154, 143, 122]); b(15, 15, -3, -3, 13, 13, [180, 170, 150]);
+    for (const [x, z, hgt] of [[3, 12, 5], [4, 13, 4], [11, 5, 6], [12, 5, 4]]) b(x, x, -hgt, -1, z, z, [90, 160, 60]);
+    b(15, 15, -5, -1, 6, 6, [138, 90, 52]); b(14, 16, -8, -6, 5, 7, [61, 158, 74]); b(15, 15, -9, -9, 6, 6, [61, 158, 74]);
+    b(4, 4, -2, -2, 4, 4, [255, 107, 168]); b(16, 16, -1, -1, 11, 11, [255, 210, 63]);
+  }, at: [5, -1, 9] },
+  night: { pal: 'shibe', walls: true, amb: .26, build(b) {
+    for (let x = 0; x < 20; x++) for (let z = 0; z < 20; z++) b(x, x, 0, 1, z, z, x % 4 === 0 ? [74, 52, 40] : [92, 66, 50]);
+    b(0, 19, -14, -1, 0, 0, [53, 44, 84]); b(0, 0, -14, -1, 1, 19, [44, 36, 70]);
+    b(10, 16, -12, -6, 1, 1, [28, 34, 90], 1); b(14, 15, -11, -10, 1, 1, [255, 230, 140], 1); b(11, 11, -9, -9, 1, 1, [255, 255, 255], 1); b(12, 12, -7, -7, 1, 1, [255, 255, 255], 1);
+    b(2, 10, -3, -2, 2, 11, [255, 253, 247]); b(2, 10, -4, -4, 5, 11, [88, 140, 255]); b(2, 4, -4, -4, 2, 4, [255, 253, 247]); b(2, 10, -6, -1, 1, 1, [122, 74, 42]);
+    b(12, 14, -4, -1, 2, 4, [122, 74, 42]); b(13, 13, -7, -5, 3, 3, [60, 50, 40]); b(12, 14, -9, -8, 2, 4, [255, 210, 63], 1);
+    b(6, 15, 0, 0, 13, 17, [180, 60, 90]);
+  }, at: [4, -4, 6] }
+};
+class PiixRoomElement extends VoxStage {
+  constructor() { super(); this._defSize = 300; this._aspect = .92; this._defSpin = 0; this._defTilt = 32; this._defLook = 'clay'; this._static = true; }
+  get scene() { return ROOM_SCENES[this.getAttribute('scene')] || ROOM_SCENES.desk; }
+  get palName() { return this.getAttribute('pal') || this.scene.pal; }
+  _label() { return `A little voxel ${this.getAttribute('scene') || 'desk'} scene with ${this.palName} in it`; }
+  _setup() {
+    const sc = this.scene, vox = [];
+    sc.build((x0, x1, y0, y1, z0, z1, c, e = 0) => { for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) vox.push([x, y, z, c, e]); });
+    /* the pal, as voxels, standing on the floor */
+    const art = voxArt(this.palName, roomClip(this.palName));
+    if (art) vox.push(...voxCells(art, 2, [sc.at[0], sc.at[1] - (art.h || art.rows.length), sc.at[2]]));
+    /* later boxes win where they overlap */
+    const map = new Map();
+    for (const v of vox) map.set(voxKey(v[0], v[1], v[2]), v);
+    this._model = voxModel([...map.values()]);
+    this._yaw = -Math.PI / 4;
+  }
+  _draw(dt, t) {
+    const g = this._g, w = this._cv.width, h = this._cv.height, m = this._model, sc = this.scene;
+    if (sc.walls) this._yaw = clamp(this._yaw, -1.35, -.22);
+    const sway = reduced() ? 0 : this._L[0] * .12;
+    const s = Math.min(w, h) * .95 / Math.hypot(m.w, m.d);
+    g.clearRect(0, 0, w, h);
+    voxPaint(g, m, { yaw: this._yaw + sway, pitch: this._pitch + this._L[1] * .05, s, x: w / 2, y: h * .52 + this._hop(t) * .4, light: this._L, look: this.look, dpr: this._dpr, t, amb: sc.amb });
+  }
+}
+/* which clip to stand a pal in: something calm */
+const roomClip = n => { const f = SPRITES[n] ? Object.keys(SPRITES[n].frames) : []; return ['sleep', 'rest', 'sit', 'idle', 'typing'].find(c => f.includes(c)) || f[0]; };
+define('piix-room', PiixRoomElement);
+ELEMENTS.room = 'piix-room';
+
+/* ---- studio/voxel.js ---- */
+/* VOXEL: any pal as a 3D toy you can spin.   @component voxel
+ *
+ *   <piix-voxel pal="bitbug"></piix-voxel>
+ *
+ * The pal's pixel art is puffed up into real voxels: thick in the middle, thin at the edges, like a
+ * soft vinyl figure. Drag it sideways to spin it (it keeps turning when you let go), the light follows
+ * your pointer, and a tap makes it hop. It plays its animation in 3D too.
+ *
+ *   pal     any pal or sprite name                                        default: bitbug
+ *   look    glossy | clay | toon | wire | holo | halftone | dither | ascii  default: glossy
+ *   size    width in px                                                    default: 200
+ *   spin    turns per minute when nobody is holding it, 0 to stay still    default: 6
+ *   depth   how puffy, 1–6                                                 default: 3
+ *   clip    which of its animations to play                                default: its first
+ *   tilt    how far you look down on it, in degrees                        default: 22
+ *   light   pointer | fixed                                                default: pointer
+ *   floor   "none" hides the soft shadow underneath
+ *
+ *   events: piix:poke */
+class PiixVoxelElement extends VoxStage {
+  _draw(dt, t) {
+    const g = this._g, w = this._cv.width, h = this._cv.height, dpr = this._dpr;
+    const first = voxArt(this.palName, this.getAttribute('clip'));
+    if (!first) return;
+    const art = reduced() ? first : voxArt(this.palName, this.getAttribute('clip'), Math.floor(t / 1000 * first.fps));
+    const m = voxFromArt(art, clamp(+this.getAttribute('depth') || 3, 1, 6));
+    const s = Math.min(w, h) * .74 / Math.max(Math.hypot(m.w, m.d), m.h), hop = this._hop(t);
+    g.clearRect(0, 0, w, h);
+    if (this.getAttribute('floor') !== 'none') {
+      const fy = h / 2 + (m.bottom - m.cy) * s * Math.cos(this._pitch) + s * .6, k = 1 + hop / (60 * dpr);
+      const gr = g.createRadialGradient(w / 2, fy, 0, w / 2, fy, m.r * s * .9 * k);
+      gr.addColorStop(0, 'rgba(23,18,31,.28)'); gr.addColorStop(1, 'rgba(23,18,31,0)');
+      g.save(); g.translate(w / 2, fy); g.scale(1, .28); g.translate(-w / 2, -fy); g.fillStyle = gr; g.fillRect(0, fy - m.r * s, w, m.r * s * 2); g.restore();
+    }
+    voxPaint(g, m, { yaw: this._yaw, pitch: this._pitch, s, x: w / 2, y: h / 2 + hop, light: this._L, look: this.look, dpr, t, persp: .012 });
+  }
+}
+define('piix-voxel', PiixVoxelElement);
+ELEMENTS.voxel = 'piix-voxel';
 
 K.start(document.currentScript);
 })();

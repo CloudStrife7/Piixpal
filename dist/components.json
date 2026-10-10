@@ -83,7 +83,7 @@
  "mochi": "sprite",
  "modem": "sprite",
  "onigiri": "sprite",
- "planet": "sprite",
+ "planet": "3d",
  "prompty": "sprite",
  "pudding": "sprite",
  "robo": "sprite",
@@ -115,5 +115,10 @@
  "squish": "power",
  "stickers": "power",
  "tabby": "power",
- "weather": "power"
+ "weather": "power",
+ "card": "3d",
+ "globe": "3d",
+ "holo": "3d",
+ "room": "3d",
+ "voxel": "3d"
 }
