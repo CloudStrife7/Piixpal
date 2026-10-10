@@ -23,9 +23,6 @@ export interface PiixPlanetAttributes { pals?: string; seed?: number | string; s
 export interface PiixGlobeAttributes { pal?: string; sky?: 'night' | 'dusk' | 'day'; snow?: number | string; size?: number | string; look?: PiixLook; }
 export interface PiixHoloAttributes { pal?: string; color?: 'cyan' | 'lime' | 'pink' | 'amber'; size?: number | string; look?: PiixLook; }
 export interface PiixRoomAttributes { scene?: 'desk' | 'pond' | 'night'; pal?: string; size?: number | string; look?: PiixLook; }
-export type PiixPrintLook = 'ascii' | 'dither' | 'halftone' | 'pixel';
-export interface PiixBackdropAttributes { kind?: 'aurora' | 'sunburst' | 'plasma' | 'rain' | 'stars' | 'clouds' | 'tunnel' | 'synthwave' | 'fire' | 'waves'; look?: PiixPrintLook; palette?: string; ink?: string; paper?: string; cell?: number | string; ramp?: string; edges?: string | number; speed?: number | string; height?: number | string; fill?: boolean | ''; }
-export interface PiixSceneAttributes { scene?: 'kiss' | 'heartbreak' | 'umbrella' | 'stargaze' | 'alone' | 'hug' | 'heart' | 'campfire'; look?: PiixPrintLook; ink?: string; paper?: string; cell?: number | string; ramp?: string; edges?: string | number; speed?: number | string; size?: number | string; }
 export interface PiixWeatherAttributes { kind?: 'snow' | 'rain' | 'leaves' | 'petals'; amount?: number | string; land?: string; box?: string; }
 export interface PiixStickersAttributes { names?: string; box?: string; }
 export interface PiixAvatarAttributes extends Omit<PiixSpriteAttributes, 'name'> { seed?: string; }
@@ -59,8 +56,6 @@ declare global {
       'piix-globe': PiixGlobeAttributes & Record<string, unknown>;
       'piix-holo': PiixHoloAttributes & Record<string, unknown>;
       'piix-room': PiixRoomAttributes & Record<string, unknown>;
-      'piix-backdrop': PiixBackdropAttributes & Record<string, unknown>;
-      'piix-scene': PiixSceneAttributes & Record<string, unknown>;
       'piix-stickers': PiixStickersAttributes & Record<string, unknown>;
       'piix-avatar': PiixAvatarAttributes & Record<string, unknown>;
     }

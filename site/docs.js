@@ -289,13 +289,3 @@ if (matchMedia('(max-width: 900px)').matches) document.querySelectorAll('.side .
   while (side.firstChild) d.appendChild(side.firstChild);
   side.appendChild(d);
 })();
-
-/* ASCII page: try a scene or backdrop in each look, live */
-document.addEventListener('click', e => {
-  const b = e.target.closest('.show-looks button');
-  if (!b) return;
-  const stage = b.closest('.show-stage'), el = stage && stage.querySelector('piix-scene, piix-backdrop');
-  if (!el) return;
-  el.setAttribute('look', b.dataset.look);
-  b.parentElement.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-});

@@ -23,7 +23,6 @@
       <a href="./" aria-current="page">Components</a>
       <a href="powers.html">Superpowers</a>
       <a href="3d.html">3D</a>
-      <a href="ascii.html">ASCII</a>
       <a href="install.html">Install</a>
       <a href="builder.html">Builder</a>
     </nav>
@@ -61,11 +60,6 @@
       <summary><a href="3d.html">3D</a><span class="n">6</span></summary>
       <h5>Pals in 3D</h5><a href="3d.html#voxel" style="--dot:var(--lime)"><i></i>Voxel</a><a href="3d.html#card" style="--dot:var(--coral)"><i></i>Card</a><a href="3d.html#planet" style="--dot:var(--sky)"><i></i>Planet</a><a href="3d.html#globe" style="--dot:var(--violet)"><i></i>Globe</a><a href="3d.html#holo" style="--dot:var(--mint)"><i></i>Holo</a><a href="3d.html#room" style="--dot:var(--sun)"><i></i>Room</a>
     </details>
-    <details class="sg">
-      <summary><a href="ascii.html">ASCII & dither</a><span class="n">18</span></summary>
-      <h5>Scenes</h5><a href="ascii.html#sc-kiss" style="--dot:var(--coral)"><i></i>Kiss</a><a href="ascii.html#sc-heartbreak" style="--dot:var(--coral)"><i></i>Heartbreak</a><a href="ascii.html#sc-heart" style="--dot:var(--coral)"><i></i>Heart</a><a href="ascii.html#sc-umbrella" style="--dot:var(--coral)"><i></i>Umbrella</a><a href="ascii.html#sc-alone" style="--dot:var(--coral)"><i></i>Alone</a><a href="ascii.html#sc-hug" style="--dot:var(--coral)"><i></i>Hug</a><a href="ascii.html#sc-stargaze" style="--dot:var(--coral)"><i></i>Stargaze</a><a href="ascii.html#sc-campfire" style="--dot:var(--coral)"><i></i>Campfire</a>
-      <h5>Backdrops</h5><a href="ascii.html#bd-aurora" style="--dot:var(--violet)"><i></i>Aurora</a><a href="ascii.html#bd-synthwave" style="--dot:var(--violet)"><i></i>Synthwave</a><a href="ascii.html#bd-rain" style="--dot:var(--violet)"><i></i>Rain</a><a href="ascii.html#bd-fire" style="--dot:var(--violet)"><i></i>Fire</a><a href="ascii.html#bd-plasma" style="--dot:var(--violet)"><i></i>Plasma</a><a href="ascii.html#bd-sunburst" style="--dot:var(--violet)"><i></i>Sunburst</a><a href="ascii.html#bd-stars" style="--dot:var(--violet)"><i></i>Stars</a><a href="ascii.html#bd-clouds" style="--dot:var(--violet)"><i></i>Clouds</a><a href="ascii.html#bd-waves" style="--dot:var(--violet)"><i></i>Waves</a><a href="ascii.html#bd-tunnel" style="--dot:var(--violet)"><i></i>Tunnel</a>
-    </details>
     <nav class="side-start"><a href="crowd.html">Crowd</a><a href="type.html">Pixel type</a></nav>
     <p class="side-none" hidden>Nothing by that name.</p>
   </aside>
@@ -73,7 +67,7 @@
 <header class="doc-head">
   <div class="crumbs"><span>Components</span></div>
   <h1>Components</h1>
-  <p>126 components, every one a plain web component. One script tag, then copy any tag from these pages into your HTML, React, Vue, Svelte, Astro, Webflow or Framer project.</p>
+  <p>124 components, every one a plain web component. One script tag, then copy any tag from these pages into your HTML, React, Vue, Svelte, Astro, Webflow or Framer project.</p>
 </header>
 <section class="doc-sec" aria-label="Component families">
   <div class="ov">
@@ -83,7 +77,6 @@
     <a href="pals.html#toys" style="--accent:var(--sun)"><div class="ov-art"><span style="font:780 30px var(--f-sans);letter-spacing:-.03em" id="ov-toys">toy box</span></div><h3>Toys + groups <span>14</span></h3><p>Throwable toys that land on your page, and whole crews in one tag: ducks, ants, fish, a choir, fireflies.</p></a>
     <a href="powers.html" style="--accent:var(--coral)"><div class="ov-art"><span style="font:780 30px var(--f-sans);letter-spacing:-.03em" id="ov-powers">superpowers</span></div><h3>Superpowers <span>23</span></h3><p>Pals that step out of the page, do real interface jobs, or turn your site into a game.</p></a>
     <a href="3d.html" style="--accent:var(--sky)"><div class="ov-art"><piix-voxel pal="bitbug" size="120" spin="10"></piix-voxel><piix-voxel pal="frog" look="toon" size="120" spin="10"></piix-voxel></div><h3>3D <span>6</span></h3><p>Pals as real 3D models: spin them, collect them as holo cards, put them on a planet or in a snow globe.</p></a>
-    <a href="ascii.html" style="--accent:var(--coral)"><div class="ov-art" style="padding:0;overflow:hidden;background:#07060b"><piix-scene scene="kiss" look="dither" style="width:100%;height:100%"></piix-scene></div><h3>ASCII &amp; dither <span>18</span></h3><p>Animated ASCII, dither and halftone backgrounds, and little films with feeling: a kiss, a heartbreak, a hug.</p></a>
     <a href="type.html" style="--accent:var(--violet)"><div class="ov-art"><div style="width:80%"><piix-type text="abc" rows="14" cell="6" shade="#c6f432" fit intro="none"></piix-type></div></div><h3>Pixel type <span>1</span></h3><p>Any font as chunky extruded blocks that rain in, lift around the cursor and ripple. Pals can walk on it.</p></a>
   </div>
   <piix-pal pal="bitbug" on="#ov-word" scale="3"></piix-pal>
@@ -98,7 +91,7 @@
   </main>
 </div>
 
-<script src="../piixpal.js?v=1c93d85974"></script>
+<script src="../piixpal.js"></script>
 <script src="../site/site.js" defer></script>
 <script src="../site/docs.js" defer></script>
 </body>

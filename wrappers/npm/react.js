@@ -33,6 +33,4 @@ export const PiixPlanet = make('piix-planet');
 export const PiixGlobe = make('piix-globe');
 export const PiixHolo = make('piix-holo');
 export const PiixRoom = make('piix-room');
-export const PiixBackdrop = make('piix-backdrop');
-export const PiixScene = make('piix-scene');
 export { loadPiixpal };
