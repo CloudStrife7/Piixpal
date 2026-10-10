@@ -124,3 +124,78 @@ const voxBuf = (key, w, h) => {
 const VOX_BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => v / 16 - .5);
 const VOX_RAMP = ' .:-=+*#%@';
 
+/* paint a model into a canvas in any look: the print looks render glossy first, then re-draw it */
+const voxPaint = (g, m, o) => {
+  const w = g.canvas.width, h = g.canvas.height, look = o.look || 'glossy', dpr = o.dpr || 1;
+  if (look === 'halftone' || look === 'dither' || look === 'ascii') {
+    const src = voxBuf('src', w, h), sg = src.getContext('2d');
+    sg.clearRect(0, 0, w, h);
+    voxDraw(sg, m, { ...o, look: 'glossy' });
+    const cw = look === 'ascii' ? 7 * dpr : look === 'dither' ? 3 * dpr : Math.max(5, Math.round(w / 34)), ch = look === 'ascii' ? 11 * dpr : cw;
+    const cols = Math.ceil(w / cw), rows = Math.ceil(h / ch), sm = voxBuf('small', cols, rows), smg = sm.getContext('2d', { willReadFrequently: true });
+    smg.clearRect(0, 0, cols, rows); smg.imageSmoothingEnabled = true; smg.drawImage(src, 0, 0, cols, rows);
+    const px = smg.getImageData(0, 0, cols, rows), d = px.data;
+    if (look === 'dither') {
+      /* ordered dither into the pal's own colours, plus a shadow and a highlight of each */
+      const pal = m.pal || (m.pal = (() => { const seen = {}, out = []; for (const f of m.faces) { const k = f[4].join(); if (!seen[k]) { seen[k] = 1; out.push(f[4], f[4].map(v => v * .5), f[4].map(v => Math.min(255, v * 1.3 + 30))); } } return out; })());
+      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+        const i = (y * cols + x) * 4;
+        if (d[i + 3] < 110) { d[i + 3] = 0; continue; }
+        const e = VOX_BAYER[(y & 3) * 4 + (x & 3)] * 70;
+        let best = pal[0], bd = 1e9;
+        for (const p of pal) { const q = (p[0] - d[i] - e) ** 2 + (p[1] - d[i + 1] - e) ** 2 + (p[2] - d[i + 2] - e) ** 2; if (q < bd) { bd = q; best = p; } }
+        d[i] = best[0]; d[i + 1] = best[1]; d[i + 2] = best[2]; d[i + 3] = 255;
+      }
+      smg.putImageData(px, 0, 0);
+      g.imageSmoothingEnabled = false; g.drawImage(sm, 0, 0, cols * cw, rows * ch);
+      return;
+    }
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `700 ${ch * .95}px ui-monospace,Menlo,Consolas,monospace`;
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      const i = (y * cols + x) * 4, a = d[i + 3] / 255;
+      if (a < .08) continue;
+      const lum = (d[i] * .3 + d[i + 1] * .59 + d[i + 2] * .11) / 255;
+      const ink = `rgb(${d[i] * .82 | 0},${d[i + 1] * .82 | 0},${d[i + 2] * .82 | 0})`;
+      if (look === 'ascii') {
+        const c = VOX_RAMP[Math.min(9, Math.round(a * (.3 + .7 * (1 - lum)) * 9 + 1))];
+        g.fillStyle = ink; g.fillText(c, x * cw + cw / 2, y * ch + ch / 2);
+      } else {
+        const r = cw * .62 * Math.sqrt(a) * (.38 + .62 * (1 - lum * .8));
+        g.fillStyle = ink; g.beginPath(); g.arc(x * cw + cw / 2 + (y & 1 ? cw / 2 : 0), y * ch + ch / 2, r, 0, 6.283); g.fill();
+      }
+    }
+    return;
+  }
+  if (look === 'toon') {
+    /* cel shading with an ink outline: draw it once in ink, a little fatter, then on top */
+    const src = voxBuf('src', w, h), sg = src.getContext('2d');
+    sg.clearRect(0, 0, w, h); voxDraw(sg, m, o);
+    const t = Math.max(2, Math.round(o.s * .22));
+    g.save(); g.globalCompositeOperation = 'source-over';
+    const ink = voxBuf('ink', w, h), ig = ink.getContext('2d');
+    ig.clearRect(0, 0, w, h); ig.drawImage(src, 0, 0); ig.globalCompositeOperation = 'source-in'; ig.fillStyle = o.ink || '#17121f'; ig.fillRect(0, 0, w, h); ig.globalCompositeOperation = 'source-over';
+    for (const [dx, dy] of [[t, 0], [-t, 0], [0, t], [0, -t], [t * .7, t * .7], [-t * .7, t * .7], [t * .7, -t * .7], [-t * .7, -t * .7]]) g.drawImage(ink, dx, dy);
+    g.drawImage(src, 0, 0);
+    g.restore();
+    return;
+  }
+  if (look === 'holo') {
+    const src = voxBuf('src', w, h), sg = src.getContext('2d');
+    sg.clearRect(0, 0, w, h); voxDraw(sg, m, o);
+    /* scanlines eaten out of it, a soft glow, and now and then a slice that slips sideways */
+    sg.globalCompositeOperation = 'destination-out'; sg.fillStyle = 'rgba(0,0,0,.42)';
+    const off = ((o.t || 0) / 40) % (3 * dpr);
+    for (let y = off; y < h; y += 3 * dpr) sg.fillRect(0, y, w, dpr);
+    sg.globalCompositeOperation = 'source-over';
+    g.save();
+    g.shadowColor = 'rgba(88,232,255,.8)'; g.shadowBlur = 18 * dpr;
+    g.globalAlpha = .82 + Math.sin((o.t || 0) / 53) * .06 + (Math.sin((o.t || 0) / 7) > .97 ? -.35 : 0);
+    g.drawImage(src, 0, 0);
+    g.restore();
+    const glitch = Math.sin((o.t || 0) / 311) > .93;
+    if (glitch) { const y = (Math.sin((o.t || 0) / 17) * .5 + .5) * h * .8, hh = h * .07; g.clearRect(0, y, w, hh); g.drawImage(src, 0, y, w, hh, (Math.sin((o.t || 0) / 5) > 0 ? 1 : -1) * 6 * dpr, y, w, hh); }
+    return;
+  }
+  voxDraw(g, m, o);
+};
+
