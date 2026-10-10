@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 // Generates the component docs pages (components/*.html) from one layout.
 // Sprite names and taglines are read straight from src/sprites/*.js.
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -14,6 +15,8 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 
 /* ---------- data ---------- */
 /* how big the everything-bundle is, gzipped, for the install page */
+/* a stamp of the current build, on every script tag, so no browser keeps an old copy */
+const VER = (() => { try { return createHash('sha1').update(readFileSync(join(root, 'piixpal.js'))).digest('hex').slice(0, 10); } catch (_) { return 'dev'; } })();
 const GZ = (() => { try { return Math.round(gzipSync(readFileSync(join(root, 'piixpal.min.js'))).length / 1024); } catch (_) { return 95; } })();
 const ACCENTS = ['var(--lime)', 'var(--coral)', 'var(--violet)', 'var(--sky)', 'var(--sun)', 'var(--mint)'];
 const sprites = readdirSync(join(root, 'src/sprites')).filter(f => f.endsWith('.js')).sort().map((f, i) => {
@@ -274,7 +277,7 @@ ${body}
   </main>
 </div>
 ${extra}
-<script src="../piixpal.js"></script>
+<script src="../piixpal.js?v=${VER}"></script>
 <script src="../site/site.js" defer></script>
 <script src="../site/docs.js" defer></script>
 </body>
@@ -818,8 +821,13 @@ writeFileSync(join(out, 'nomad.html'), `<!doctype html>
 <body>
 <p>Nomad's other window.<small>Put it right next to the first one. When Nomad reaches the edge over there, it walks in here.</small></p>
 <piix-pal pal="nomad"></piix-pal>
-<script src="../piixpal.js"></script>
+<script src="../piixpal.js?v=${VER}"></script>
 </body>
 </html>
 `);
+/* the home page and the 404 page load the same build */
+for (const [file, src] of [['index.html', 'piixpal.js'], ['404.html', '/piixpal.min.js']]) {
+  const p = join(root, file), html = readFileSync(p, 'utf8');
+  writeFileSync(p, html.replace(/<script src="[^"]*piixpal(\.min)?\.js(\?v=[^"]*)?"><\/script>/, `<script src="${src}?v=${VER}"></script>`));
+}
 console.log(`components/  ${pages.length} pages, ${sprites.length} sprites, ${PALS.length} pals, ${POWERS.length} superpowers`);
