@@ -4,6 +4,7 @@
  *   <h1>Hello <PiixPal pal="bitbug" /></h1>
  *   <PiixSprite name="gloop" size={200} render="voxel" />
  *   <PiixWeather kind="snow" />
+ *   <PiixVoxel pal="frog" look="toon" />
  *
  * Safe in Next.js server components' trees: Piixpal itself only loads in the browser.
  * Boolean options (shy, tilt, still, always…) take `true`. */
@@ -26,4 +27,10 @@ export const PiixCrowd = make('piix-crowd');
 export const PiixWeather = make('piix-weather');
 export const PiixStickers = make('piix-stickers');
 export const PiixAvatar = make('piix-avatar');
+export const PiixVoxel = make('piix-voxel');
+export const PiixCard = make('piix-card');
+export const PiixPlanet = make('piix-planet');
+export const PiixGlobe = make('piix-globe');
+export const PiixHolo = make('piix-holo');
+export const PiixRoom = make('piix-room');
 export { loadPiixpal };
