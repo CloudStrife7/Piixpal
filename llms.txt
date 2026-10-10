@@ -81,6 +81,12 @@
 - Squish: A marshmallow that gets squashed as the text nears its limit. Tag: <piix-pal pal="squish">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/squish.json
 - Gulp: A pelican that gulps down files dropped on your drop zone. Tag: <piix-pal pal="gulp">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/gulp.json
 - Plug: Shows up when the connection drops, plugs back in when it returns. Tag: <piix-pal pal="plug">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/plug.json
+- Voxel: Any pal as a 3D toy you can spin, in eight looks from glossy to ASCII. Tag: <piix-voxel>. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/voxel.json
+- Card: A holographic trading card for any pal, with the pal standing in 3D. Tag: <piix-card>. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/card.json
+- Planet: A tiny voxel world with pals walking round it. Tag: <piix-planet>. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/planet.json
+- Globe: A pal in a snow globe. Shake it. Tag: <piix-globe>. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/globe.json
+- Holo: A pal projected as a flickering hologram. Tag: <piix-holo>. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/holo.json
+- Room: A little isometric voxel diorama with a pal living in it. Tag: <piix-room>. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/room.json
 - Alien: A tiny visitor with three eyes and one antenna. Has questions about your CSS. Tag: <piix-sprite name="alien">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/alien.json
 - Avocado: Half an avocado, proudly showing off its pit. Ripe for exactly one day. Tag: <piix-sprite name="avocado">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/avocado.json
 - Battery: A battery that is always charging and always at one percent. Brave. Tag: <piix-sprite name="battery">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/battery.json
@@ -120,7 +126,6 @@
 - Mochi: A soft pink rice cake. Squishy, blushy, easily delighted. Tag: <piix-sprite name="mochi">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/mochi.json
 - Modem: A dial-up modem. Its lights blink in a pattern only it understands. Tag: <piix-sprite name="modem">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/modem.json
 - Onigiri: A rice ball in a seaweed jacket. Calm, round-ish, triangular. Tag: <piix-sprite name="onigiri">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/onigiri.json
-- Planet: A small ringed planet. Spins slowly, shines a little, thinks big. Tag: <piix-sprite name="planet">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/planet.json
 - Prompty: A chat bubble who is always just about to reply. Thinking… thinking… Tag: <piix-sprite name="prompty">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/prompty.json
 - Pudding: A caramel pudding on a plate. Cannot stop jiggling. Tag: <piix-sprite name="pudding">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/pudding.json
 - Robo: A tiny robot head. The antenna light means it is thinking. It is always thinking. Tag: <piix-sprite name="robo">. shadcn: npx shadcn@latest add https://piixpal.dvkk.dev/r/robo.json

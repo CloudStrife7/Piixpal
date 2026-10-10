@@ -1,0 +1,18 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "voxel",
+  "type": "registry:component",
+  "title": "Voxel",
+  "description": "Any pal as a 3D toy you can spin, in eight looks from glossy to ASCII.",
+  "registryDependencies": [
+    "https://piixpal.vercel.app/r/piixpal.json"
+  ],
+  "files": [
+    {
+      "path": "registry/piixpal/voxel.tsx",
+      "type": "registry:component",
+      "target": "components/piixpal/voxel.tsx",
+      "content": "\"use client\";\n/* Voxel, from the Piixpal shadcn registry. Options: https://piixpal.dvkk.dev/components/ */\nimport * as React from \"react\";\nimport { loadPiixpal, piixAttrs, type PiixProps } from \"@/lib/piixpal\";\n\nexport function Voxel(props: PiixProps) {\n  React.useEffect(() => { loadPiixpal(\"voxel\"); }, []);\n  return React.createElement(\"piix-voxel\", piixAttrs(props));\n}\n\nexport default Voxel;\n"
+    }
+  ]
+}

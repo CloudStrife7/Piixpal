@@ -400,6 +400,42 @@
       "description": "Shows up when the connection drops, plugs back in when it returns."
     },
     {
+      "name": "voxel",
+      "type": "registry:component",
+      "title": "Voxel",
+      "description": "Any pal as a 3D toy you can spin, in eight looks from glossy to ASCII."
+    },
+    {
+      "name": "card",
+      "type": "registry:component",
+      "title": "Card",
+      "description": "A holographic trading card for any pal, with the pal standing in 3D."
+    },
+    {
+      "name": "planet",
+      "type": "registry:component",
+      "title": "Planet",
+      "description": "A tiny voxel world with pals walking round it."
+    },
+    {
+      "name": "globe",
+      "type": "registry:component",
+      "title": "Globe",
+      "description": "A pal in a snow globe. Shake it."
+    },
+    {
+      "name": "holo",
+      "type": "registry:component",
+      "title": "Holo",
+      "description": "A pal projected as a flickering hologram."
+    },
+    {
+      "name": "room",
+      "type": "registry:component",
+      "title": "Room",
+      "description": "A little isometric voxel diorama with a pal living in it."
+    },
+    {
       "name": "alien",
       "type": "registry:component",
       "title": "Alien",
@@ -632,12 +668,6 @@
       "type": "registry:component",
       "title": "Onigiri",
       "description": "A rice ball in a seaweed jacket. Calm, round-ish, triangular."
-    },
-    {
-      "name": "planet",
-      "type": "registry:component",
-      "title": "Planet",
-      "description": "A small ringed planet. Spins slowly, shines a little, thinks big."
     },
     {
       "name": "prompty",

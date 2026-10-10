@@ -1,0 +1,18 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "card",
+  "type": "registry:component",
+  "title": "Card",
+  "description": "A holographic trading card for any pal, with the pal standing in 3D.",
+  "registryDependencies": [
+    "https://piixpal.vercel.app/r/piixpal.json"
+  ],
+  "files": [
+    {
+      "path": "registry/piixpal/card.tsx",
+      "type": "registry:component",
+      "target": "components/piixpal/card.tsx",
+      "content": "\"use client\";\n/* Card, from the Piixpal shadcn registry. Options: https://piixpal.dvkk.dev/components/ */\nimport * as React from \"react\";\nimport { loadPiixpal, piixAttrs, type PiixProps } from \"@/lib/piixpal\";\n\nexport function Card(props: PiixProps) {\n  React.useEffect(() => { loadPiixpal(\"card\"); }, []);\n  return React.createElement(\"piix-card\", piixAttrs(props));\n}\n\nexport default Card;\n"
+    }
+  ]
+}

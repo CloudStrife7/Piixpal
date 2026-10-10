@@ -1,0 +1,18 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "globe",
+  "type": "registry:component",
+  "title": "Globe",
+  "description": "A pal in a snow globe. Shake it.",
+  "registryDependencies": [
+    "https://piixpal.vercel.app/r/piixpal.json"
+  ],
+  "files": [
+    {
+      "path": "registry/piixpal/globe.tsx",
+      "type": "registry:component",
+      "target": "components/piixpal/globe.tsx",
+      "content": "\"use client\";\n/* Globe, from the Piixpal shadcn registry. Options: https://piixpal.dvkk.dev/components/ */\nimport * as React from \"react\";\nimport { loadPiixpal, piixAttrs, type PiixProps } from \"@/lib/piixpal\";\n\nexport function Globe(props: PiixProps) {\n  React.useEffect(() => { loadPiixpal(\"globe\"); }, []);\n  return React.createElement(\"piix-globe\", piixAttrs(props));\n}\n\nexport default Globe;\n"
+    }
+  ]
+}
