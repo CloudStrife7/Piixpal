@@ -36,3 +36,33 @@ const voxModel = vox => {
   return { faces, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, cz: (z0 + z1) / 2, w, h, d, r: Math.hypot(w, h, d) / 2, bottom: y1 + .5 };
 };
 
+/* puff pixel art up into voxels: the further a pixel is from the silhouette's edge, the thicker
+ * the toy is there, so pals come out round like soft vinyl figures rather than flat slabs */
+const VOX_MODELS = new WeakMap();
+const voxFromArt = (art, depth = 3, at = [0, 0, 0]) => {
+  const memo = VOX_MODELS.get(art.rows);
+  if (memo && memo.depth === depth && !at[0] && !at[1] && !at[2]) return memo;
+  const vox = voxCells(art, depth, at), m = voxModel(vox);
+  m.depth = depth; m.cells = vox;
+  if (!at[0] && !at[1] && !at[2]) VOX_MODELS.set(art.rows, m);
+  return m;
+};
+const voxCells = (art, depth = 3, at = [0, 0, 0]) => {
+  const rows = art.rows, h = rows.length, pad = (art.h || h) - h, w = Math.max(...rows.map(r => r.length));
+  const on = (x, y) => y >= 0 && y < h && x >= 0 && x < (rows[y] || '').length && !!art.palette[rows[y][x]];
+  const dist = rows.map(r => new Array(w).fill(0)), q = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (on(x, y) && (!on(x - 1, y) || !on(x + 1, y) || !on(x, y - 1) || !on(x, y + 1))) { dist[y][x] = 1; q.push([x, y]); }
+  for (let i = 0; i < q.length; i++) {
+    const [x, y] = q[i];
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (on(x + dx, y + dy) && !dist[y + dy][x + dx]) { dist[y + dy][x + dx] = dist[y][x] + 1; q.push([x + dx, y + dy]); }
+  }
+  const vox = [], col = {};
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!on(x, y)) continue;
+    const c = rows[y][x], rgb = col[c] || (col[c] = hexRGBA(art.palette[c]));
+    const half = Math.min(depth, Math.floor((dist[y][x] - 1) * .85));
+    for (let z = -half; z <= half; z++) vox.push([x + at[0], y + pad + at[1], z + at[2], rgb, 0]);
+  }
+  return vox;
+};
+
