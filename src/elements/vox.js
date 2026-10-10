@@ -199,3 +199,91 @@ const voxPaint = (g, m, o) => {
   voxDraw(g, m, o);
 };
 
+/* ---------- the stage every 3D component stands on ----------
+ * a canvas in a shadow root, sized by the size attribute; drag to turn, the light follows the
+ * pointer, it only draws while on screen, and it holds still for reduced motion */
+class VoxStage extends HTMLElement {
+  static get observedAttributes() { return ['pal', 'name', 'look', 'size', 'spin', 'depth', 'clip', 'tilt', 'scene', 'pals', 'light', 'rarity']; }
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this._tick = this._tick.bind(this);
+    this._yaw = -.6; this._vy = 0; this._vis = true; this._L = [-.5, -.8, .7]; this._t0 = now();
+  }
+  connectedCallback() {
+    this._build();
+    this._io = new IntersectionObserver(es => { this._vis = es[es.length - 1].isIntersecting; }, { rootMargin: '100px' });
+    this._io.observe(this);
+    this.addEventListener('pointerdown', this._pd = e => this._down(e));
+    sub(this._tick);
+  }
+  disconnectedCallback() { unsub(this._tick); if (this._io) this._io.disconnect(); this.removeEventListener('pointerdown', this._pd); }
+  attributeChangedCallback(n, a, b) { if (a !== b && this._cv) { this._sig = ''; this._build(); } }
+  get palName() { return this.getAttribute('pal') || this.getAttribute('name') || this._defPal || 'bitbug'; }
+  get look() { const l = this.getAttribute('look'); return VOX_LOOKS.includes(l) ? l : this._defLook || 'glossy'; }
+  _css() { return ''; }
+  _html() { return '<canvas part="canvas"></canvas>'; }
+  _build() {
+    /* the pal's own file may still be loading: build now, and again once it's here */
+    const p = this.palName;
+    clearTimeout(this._retry);
+    if (this._needsPal !== false && !SPRITES[p] && !FIGURES[p] && (this._tries = (this._tries || 0) + 1) < 80) this._retry = setTimeout(() => this.isConnected && this._build(), 125);
+    const size = +this.getAttribute('size') || this._defSize || 200, H = Math.round(size * (this._aspect || 1));
+    const dpr = this._dpr = Math.min(devicePixelRatio || 1, 2);
+    this._w = size; this._h = H;
+    const html = this._html(size, H);
+    this.shadowRoot.innerHTML = `<style>:host{display:inline-block;vertical-align:bottom;line-height:0;touch-action:pan-y;cursor:grab;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+:host(:active){cursor:grabbing}canvas{display:block;width:${size}px;height:${H}px}${this._css(size, H)}</style>${html}`;
+    this._cv = this.shadowRoot.querySelector('canvas');
+    const cw = this._cvW || size, ch = this._cvH || H;
+    this._cv.width = Math.round(cw * dpr); this._cv.height = Math.round(ch * dpr);
+    this._cv.style.width = cw + 'px'; this._cv.style.height = ch + 'px';
+    this._g = this._cv.getContext('2d');
+    if (!this.hasAttribute('aria-label') || this._autoLabel) { this._autoLabel = true; this.setAttribute('role', 'img'); this.setAttribute('aria-label', this._label ? this._label() : `${this.palName}, in 3D`); }
+    if (this._setup) this._setup();
+  }
+  /* drag sideways to spin; a tap without moving pokes it */
+  _down(e) {
+    const x0 = e.clientX, y0 = e.clientY, yaw0 = this._yaw;
+    let lx = x0, lt = now(), moved = false;
+    const mv = ev => {
+      const dx = ev.clientX - x0;
+      if (Math.abs(dx) + Math.abs(ev.clientY - y0) > 5) moved = true;
+      this._yaw = yaw0 + dx * .012;
+      const t = now(), step = ev.clientX - lx;
+      this._vy = step * .012 / Math.max(.008, (t - lt) / 1000); lx = ev.clientX; lt = t;
+      this._dragging = true;
+      if (this._shake) this._shake(step, ev.movementY || 0);
+    };
+    const up = () => {
+      removeEventListener('pointermove', mv); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
+      this._dragging = false;
+      if (!moved) { this._hopAt = now(); this._poke && this._poke(); this.dispatchEvent(new CustomEvent('piix:poke', { bubbles: true })); }
+    };
+    addEventListener('pointermove', mv); addEventListener('pointerup', up); addEventListener('pointercancel', up);
+  }
+  _tick(dt, t) {
+    if (!this._vis || !this._g) return;
+    const R = reduced(), spin = this.hasAttribute('spin') ? +this.getAttribute('spin') : this._defSpin ?? 6;
+    if (!this._dragging) { this._vy = lerp(this._vy, R ? 0 : spin * Math.PI / 30, Math.min(1, dt * 1.6)); this._yaw += this._vy * dt; }
+    /* light: from the pointer when it's near, otherwise the default high-left key light */
+    const r = this.getBoundingClientRect();
+    let want = [-.5, -.8, .7];
+    if (this.getAttribute('light') !== 'fixed' && ptr.seen && ptr.cx > -1e4) {
+      const dx = (ptr.cx - (r.left + r.width / 2)) / Math.max(200, r.width), dy = (ptr.cy - (r.top + r.height / 2)) / Math.max(200, r.height);
+      if (Math.abs(dx) < 4 && Math.abs(dy) < 4) want = [clamp(dx, -1.5, 1.5), clamp(dy, -1.5, 1.5), .75];
+    }
+    for (let i = 0; i < 3; i++) this._L[i] = lerp(this._L[i], want[i], Math.min(1, dt * 6));
+    /* still scenes only redraw when the angle, the light or a hop changes */
+    if (this._static) {
+      const sig = this._yaw.toFixed(3) + this._L.map(v => v.toFixed(2)).join() + (now() - (this._hopAt || -1e9) < 600);
+      if (sig === this._sig) return;
+      this._sig = sig;
+    }
+    this._draw(dt, Math.max(0, t - this._t0));
+  }
+  /* a little jump after a poke, in canvas px */
+  _hop(t) { const e = (now() - (this._hopAt || -1e9)) / 1000; return e < .5 ? -Math.sin(e / .5 * Math.PI) * 18 * this._dpr : 0; }
+  get _pitch() { return -(this.hasAttribute('tilt') ? +this.getAttribute('tilt') : this._defTilt ?? 22) * Math.PI / 180; }
+}
+Piixpal.vox = { looks: VOX_LOOKS, art: voxArt, model: voxModel, fromArt: voxFromArt, draw: voxDraw, paint: voxPaint };
