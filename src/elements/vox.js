@@ -66,3 +66,50 @@ const voxCells = (art, depth = 3, at = [0, 0, 0]) => {
   return vox;
 };
 
+/* ---------- drawing ---------- */
+/* o: { yaw, pitch, s (px per voxel), x, y (centre on the canvas), light [x,y,z], look, amb, back, persp } */
+const voxDraw = (g, m, o) => {
+  const cy = Math.cos(o.yaw), sy = Math.sin(o.yaw), cp = Math.cos(o.pitch), sp = Math.sin(o.pitch);
+  const rot = (x, y, z) => { const x1 = x * cy + z * sy, z1 = -x * sy + z * cy; return [x1, y * cp - z1 * sp, y * sp + z1 * cp]; };
+  const N = VOX_DIRS.map(D => rot(D[0], D[1], D[2]));
+  const U = VOX_DIRS.map(D => D[0] ? rot(0, 1, 0) : rot(1, 0, 0));
+  const V = VOX_DIRS.map(D => D[2] ? rot(0, 1, 0) : rot(0, 0, 1));
+  const L = voxNorm(o.light || [-.5, -.8, .7]), H = voxNorm([L[0], L[1], L[2] + 1]);
+  const look = o.look || 'glossy', amb = o.amb ?? (look === 'clay' ? .58 : .44), back = o.back || look === 'wire';
+  const list = [];
+  for (const f of m.faces) {
+    const n = N[f[3]], front = n[2] > 0;
+    if (!front && !back) continue;
+    const c = rot(f[0] - m.cx, f[1] - m.cy, f[2] - m.cz);
+    list.push([c[0] + n[0] * .5, c[1] + n[1] * .5, c[2] + n[2] * .5, f, front]);
+  }
+  list.sort((a, b) => a[2] - b[2]);
+  const s = o.s, P = o.persp || 0;
+  g.lineJoin = 'round';
+  for (const [x, y, z, f, front] of list) {
+    const d = f[3], u = U[d], v = V[d], n = N[d], k = P ? 1 / (1 - z * P) : 1;
+    const X = (a, b) => o.x + (x + u[0] * a + v[0] * b) * s * k, Y = (a, b) => o.y + (y + u[1] * a + v[1] * b) * s * k;
+    g.beginPath();
+    g.moveTo(X(-.5, -.5), Y(-.5, -.5)); g.lineTo(X(.5, -.5), Y(.5, -.5)); g.lineTo(X(.5, .5), Y(.5, .5)); g.lineTo(X(-.5, .5), Y(-.5, .5)); g.closePath();
+    if (look === 'wire') {
+      g.strokeStyle = front ? (o.ink || 'rgba(198,244,50,.95)') : (o.ink2 || 'rgba(198,244,50,.16)');
+      g.lineWidth = Math.max(1, s * .06); g.stroke();
+      continue;
+    }
+    const diff = Math.max(0, n[0] * L[0] + n[1] * L[1] + n[2] * L[2]);
+    const [r, gg, b] = f[4];
+    let k2, add = 0;
+    if (f[5]) { k2 = 1.08; }
+    else if (look === 'toon') k2 = diff > .55 ? 1.05 : diff > .2 ? .82 : .62;
+    else if (look === 'clay') k2 = amb + .5 * diff;
+    else { k2 = amb + .62 * diff; add = Math.pow(Math.max(0, n[0] * H[0] + n[1] * H[1] + n[2] * H[2]), 26) * (look === 'holo' ? 120 : 150); }
+    let fill;
+    if (look === 'holo') { const t = (r * .3 + gg * .59 + b * .11) / 255 * .5 + .5; fill = `rgba(${90 * k2 * t + add | 0},${235 * k2 * t + add | 0},${255 * k2 * t + add | 0},.85)`; }
+    else if (look === 'clay') { const p = v => Math.min(255, (v * .78 + 255 * .22) * k2) | 0; fill = `rgb(${p(r)},${p(gg)},${p(b)})`; }
+    else fill = `rgb(${Math.min(255, r * k2 + add) | 0},${Math.min(255, gg * k2 + add) | 0},${Math.min(255, b * k2 + add) | 0})`;
+    g.fillStyle = fill; g.fill();
+    /* the same colour round the edge closes the hairline cracks between faces */
+    g.strokeStyle = fill; g.lineWidth = Math.max(.6, s * .04); g.stroke();
+  }
+};
+
