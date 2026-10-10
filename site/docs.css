@@ -273,3 +273,16 @@
 .pg-tile figcaption b{font:700 14px/1.2 var(--f-sans)}
 .pg-tile .copy{position:static;align-self:flex-start;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;font:500 12px/1.3 var(--f-mono);text-transform:none;letter-spacing:0}
 .pd-over{position:relative;margin:0;font:800 30px/1.1 var(--f-sans);color:#fff;text-shadow:0 2px 0 #000;text-align:center}
+
+/* ASCII showcase: one big live stage per scene and backdrop */
+.show{margin-bottom:72px}
+.show-stage{position:relative;margin:0 0 18px;border:2px solid var(--ink);border-radius:var(--r-lg);overflow:hidden;background:#07060b;box-shadow:0 4px 0 var(--ink);line-height:0}
+.show-stage piix-scene{width:100%}
+.show-looks{position:absolute;z-index:2;top:12px;right:12px;display:flex;gap:4px;padding:4px;border-radius:999px;background:rgba(10,8,16,.72);backdrop-filter:blur(6px);line-height:1}
+.show-looks button{border:0;border-radius:999px;padding:6px 11px;background:transparent;color:#cdc6da;font:600 12px/1 var(--f-mono);cursor:pointer}
+.show-looks button[aria-pressed="true"]{background:var(--lime);color:#17121f}
+.show-bd{position:relative;height:clamp(300px,42vw,440px);display:grid;place-items:center;text-align:center;padding:24px;line-height:1.3}
+.show-demo{position:relative;max-width:30ch}
+.show-demo h3{margin:0 0 8px;font:800 clamp(28px,4vw,46px)/1 var(--f-sans);letter-spacing:-.03em;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.7)}
+.show-demo p{margin:0 0 16px;font:500 16px/1.45 var(--f-sans);color:#f2eef8;text-shadow:0 1px 8px rgba(0,0,0,.8)}
+.show-btn{display:inline-block;padding:10px 18px;border-radius:999px;background:var(--lime);color:#17121f;font:700 14px/1 var(--f-sans);box-shadow:0 3px 0 #17121f}
