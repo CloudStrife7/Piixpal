@@ -23,3 +23,12 @@ const kitCss = () => `
 .drop{position:relative;filter:drop-shadow(0 var(--u) 0 var(--ink));transition:filter .08s,transform .08s}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}`;
 
+/* a pal's frame, drawn crisp into a canvas at s px per pixel */
+const kitPal = (cv, name, clip, i, s) => {
+  const sp = SPRITES[name]; if (!sp) return false;
+  const b = baked(sp), fr = b[clip] || b[Object.keys(b)[0]], img = fr[Math.max(0, i | 0) % fr.length];
+  if (cv.width !== sp.w * s || cv.height !== sp.h * s) { cv.width = sp.w * s; cv.height = sp.h * s; }
+  const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.clearRect(0, 0, cv.width, cv.height); g.drawImage(img, 0, 0, cv.width, cv.height);
+  return true;
+};
+const kitClip = (name, want) => { const sp = SPRITES[name], c = sp ? Object.keys(sp.frames) : []; return want.find(w => c.includes(w)) || c[0]; };
