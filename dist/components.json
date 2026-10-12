@@ -120,9 +120,5 @@
  "globe": "3d",
  "holo": "3d",
  "room": "3d",
- "voxel": "3d",
- "button": "kit",
- "checkbox": "kit",
- "progress": "kit",
- "toggle": "kit"
+ "voxel": "3d"
 }
