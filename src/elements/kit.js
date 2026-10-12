@@ -16,8 +16,9 @@ const KIT_FONT = '"Silkscreen","Press Start 2P",ui-monospace,Menlo,Consolas,mono
 
 /* the styles every kit component shares: the ink frame, the face inside it, the shadow under it */
 const kitCss = () => `
-:host{--ink:#17121f;--u:${KIT_U}px;display:inline-block;vertical-align:middle;font:400 14px/1.1 ${KIT_FONT};-webkit-tap-highlight-color:transparent}
+:host{--ink:#17121f;--u:${KIT_U}px;position:relative;display:inline-block;vertical-align:middle;font:400 14px/1.1 ${KIT_FONT};-webkit-tap-highlight-color:transparent}
 :host([hidden]){display:none}
+.drop,.frame,.face{display:block}
 .frame{position:relative;background:var(--ink);clip-path:${kitCorners()};padding:var(--u)}
 .face{position:relative;clip-path:${kitCorners(KIT_U / 2)}}
 .drop{position:relative;filter:drop-shadow(0 var(--u) 0 var(--ink));transition:filter .08s,transform .08s}
