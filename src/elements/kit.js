@@ -2,3 +2,7 @@
  * shadow the control presses down into, a few colour tones, and a tiny pal painter. Every kit
  * component (button, toggle, progress, slider, checkbox…) is built from these. */
 
+const KIT_U = 4;
+/* a clip-path with two-step pixel corners, u px per step */
+const kitCorners = (u = KIT_U) => `polygon(0 ${2 * u}px,${u}px ${2 * u}px,${u}px ${u}px,${2 * u}px ${u}px,${2 * u}px 0,calc(100% - ${2 * u}px) 0,calc(100% - ${2 * u}px) ${u}px,calc(100% - ${u}px) ${u}px,calc(100% - ${u}px) ${2 * u}px,100% ${2 * u}px,100% calc(100% - ${2 * u}px),calc(100% - ${u}px) calc(100% - ${2 * u}px),calc(100% - ${u}px) calc(100% - ${u}px),calc(100% - ${2 * u}px) calc(100% - ${u}px),calc(100% - ${2 * u}px) 100%,${2 * u}px 100%,${2 * u}px calc(100% - ${u}px),${u}px calc(100% - ${u}px),${u}px calc(100% - ${2 * u}px),0 calc(100% - ${2 * u}px))`;
+
