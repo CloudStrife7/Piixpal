@@ -42,3 +42,59 @@ const CH_SHADER = `vec4 effect(vec2 uv,vec2 cell){
   }
   if(y<=0.&&y>-1./u_res.y)c=vec4(dpal(.4,cell),1.);
   return c;}`;
+class PiixChartElement extends GLStage {
+  static get observedAttributes() { return [...GLStage.observedAttributes, 'values', 'labels', 'suffix', 'min']; }
+  constructor() { super(); this._defPx = 3; this._defPal = 'lime'; this._hi = -1; this._tex = { owner: {}, src: null, dirty: true }; }
+  attributeChangedCallback(n, a, b) { if (n === 'values' || n === 'labels' || n === 'suffix' || n === 'min') { if (this._cv) this._data(); return; } super.attributeChangedCallback(n, a, b); }
+  get kind() { return { line: 1, bars: 2 }[this.getAttribute('kind')] || 0; }
+  _hostCss() { return 'width:100%;' + (this.getAttribute('height') ? '' : 'height:220px;'); }
+  _css() {
+    const l = this._pal.list;
+    return `.tip{position:absolute;z-index:2;padding:6px 9px 7px;background:${l[l.length - 1]};color:${l[0]};font:600 12.5px/1.2 "Bricolage Grotesque",system-ui,sans-serif;clip-path:${kitCorners(2)};transform:translate(-50%,-100%);pointer-events:none;white-space:nowrap;opacity:0;transition:opacity .12s}
+.tip small{display:block;font:400 10px/1 ${KIT_FONT};text-transform:uppercase;opacity:.7;margin-bottom:3px}
+.ax{position:absolute;right:0;font:400 10px/1 ${KIT_FONT};opacity:.5;pointer-events:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}`;
+  }
+  _html() { return '<canvas aria-hidden="true"></canvas><span class="ax" style="top:0"></span><span class="tip" aria-hidden="true"></span><table class="sr"></table>'; }
+  _setup() {
+    this.setAttribute('role', 'figure');
+    this._data();
+    this.addEventListener('pointermove', e => {
+      const r = this.getBoundingClientRect(), x = clamp((e.clientX - r.left) / r.width, 0, 1), n = this._vals.length;
+      this._hi = !n ? -1 : this.kind === 2 ? Math.min(n - 1, Math.floor(x * n)) : Math.round(x * (n - 1));
+      this._tipAt();
+    });
+    this.addEventListener('pointerleave', () => { this._hi = -1; this.shadowRoot.querySelector('.tip').style.opacity = 0; });
+  }
+  /* read the numbers into a one-row texture the shader samples */
+  _data() {
+    const vals = (this.getAttribute('values') || '').split(',').map(Number).filter(v => !isNaN(v)).slice(0, 256);
+    const labs = (this.getAttribute('labels') || '').split(',').map(s => s.trim());
+    this._vals = vals.length ? vals : [0, 0]; this._labs = labs;
+    const lo = this._lo = this.hasAttribute('min') ? +this.getAttribute('min') : Math.min(0, ...this._vals), max = this._max = Math.max(...this._vals, lo + 1), n = this._vals.length;
+    const c = this._tex.src || (this._tex.src = document.createElement('canvas'));
+    c.width = n; c.height = 1;
+    const g = c.getContext('2d'), d = g.createImageData(n, 1);
+    this._vals.forEach((v, i) => { const k = Math.round(clamp((v - lo) / (max - lo), 0, 1) * 255); d.data.set([k, k, k, 255], i * 4); });
+    g.putImageData(d, 0, 0);
+    this._tex.dirty = true;
+    const sfx = this.getAttribute('suffix') || '';
+    this.shadowRoot.querySelector('.ax').textContent = (+max.toFixed(2)) + sfx;
+    this.shadowRoot.querySelector('.sr').innerHTML = `<tr><th>Label</th><th>Value</th></tr>` + this._vals.map((v, i) => `<tr><td>${(labs[i] || i + 1).toString().replace(/[<>&]/g, '')}</td><td>${v}${sfx.replace(/[<>&]/g, '')}</td></tr>`).join('');
+    this.setAttribute('aria-label', `Chart of ${n} values, from ${Math.min(...this._vals)} to ${max}`);
+  }
+  _tipAt() {
+    const tip = this.shadowRoot.querySelector('.tip'), i = this._hi, n = this._vals.length;
+    if (i < 0) { tip.style.opacity = 0; return; }
+    const r = this.getBoundingClientRect(), x = this.kind === 2 ? (i + .5) / n : i / Math.max(1, n - 1), pad = 6 * this._px / (r.height * Math.min(devicePixelRatio || 1, 2));
+    const y = 1 - (pad + (1 - pad * 2) * (this._vals[i] - this._lo) / (this._max - this._lo));
+    tip.innerHTML = `${this._labs[i] ? `<small>${this._labs[i].replace(/[<>&]/g, '')}</small>` : ''}${this._vals[i]}${(this.getAttribute('suffix') || '').replace(/[<>&]/g, '')}`;
+    tip.style.left = clamp(x * r.width, 30, r.width - 30) + 'px'; tip.style.top = Math.max(26, y * r.height - 10) + 'px'; tip.style.opacity = 1;
+  }
+  _texture() { const t = this._tex; const out = { owner: t.owner, src: t.src, dirty: t.dirty }; t.dirty = false; return out; }
+  _shader() { return CH_SHADER; }
+  _uniforms() {
+    const g = reduced() ? 1 : clamp((now() - (this._seen || now())) / 1100, 0, 1);
+    return { u_k: [this._vals.length, g, this._hi, this.kind] };
+  }
+}
