@@ -1,0 +1,279 @@
+<!doctype html>
+<!-- Pixel UI launch film, the 30-second sunset cut. Every component on the docs, in one warm, psychedelic world.
+     PAGE=ui30.html NAME=pixelui-30 WAV=pixelui30.wav node video/render.mjs   ·   open in a browser to watch live (?t=8) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pixel UI: the sunset cut</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@400;600&family=Silkscreen&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<script>
+/* a clock the renderer owns: time, animation frames and timers only move when it is told to */
+(() => {
+  let now = 0, seed = 11, tid = 1;
+  window.__realNow = performance.now.bind(performance);
+  window.__realSetInterval = setInterval.bind(window);
+  window.__realClearInterval = clearInterval.bind(window);
+  const queue = [], timers = new Map();
+  performance.now = () => now;
+  Date.now = () => 1790000000000 + now;
+  window.requestAnimationFrame = cb => queue.push(cb);
+  window.cancelAnimationFrame = () => {};
+  window.setTimeout = (fn, ms = 0, ...a) => { const id = tid++; timers.set(id, { at: now + Math.max(0, +ms || 0), fn, a }); return id; };
+  window.setInterval = (fn, ms = 0, ...a) => { const id = tid++; timers.set(id, { at: now + Math.max(1, +ms || 0), fn, a, every: Math.max(1, +ms || 0) }); return id; };
+  window.clearTimeout = window.clearInterval = id => timers.delete(id);
+  Math.random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  window.__clock = {
+    get ms() { return now; },
+    step(dt) {
+      const end = now + Math.max(0, dt);
+      for (let guard = 0; guard < 5000; guard++) {
+        let best = null, bid = 0;
+        for (const [id, t] of timers) if (t.at <= end && (!best || t.at < best.at)) { best = t; bid = id; }
+        if (!best) break;
+        now = Math.max(now, best.at);
+        if (best.every) best.at += best.every; else timers.delete(bid);
+        try { typeof best.fn === 'function' && best.fn(...best.a); } catch (e) { console.error(e); }
+      }
+      now = end;
+      queue.splice(0).forEach(cb => { try { cb(now); } catch (e) { console.error(e); } });
+    }
+  };
+})();
+</script>
+<style>
+  :root { --plum: #160925; --wine: #4d1650; --mag: #b0285e; --coral: #ff5a6e; --orange: #ff9b45; --gold: #ffe08a; --cream: #f8efe4; --ink: #1d0d24 }
+  html, body { margin: 0; background: #000; overflow: hidden }
+  #stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #08070d; font-family: "Bricolage Grotesque", system-ui, sans-serif; color: #fff4ea }
+  #world { position: absolute; inset: 0 }
+  .shot { position: absolute; inset: 0; visibility: hidden; overflow: hidden }
+  .shot.on { visibility: visible }
+  .cam { position: absolute; inset: 0; transform-origin: 50% 50% }
+  .bg { position: absolute; inset: 0 }
+  .pix { font-family: Silkscreen, monospace; text-transform: uppercase; letter-spacing: .08em }
+  .mono { font-family: "JetBrains Mono", monospace }
+  .plum { background: radial-gradient(ellipse at 30% 20%, #4d1650 0%, #160925 60%) }
+  .paper { background: radial-gradient(ellipse at 70% 10%, #fff6ea 0%, #f6e6d6 70%); color: var(--ink) }
+  /* the big retro title on every shot */
+  .ttl { position: absolute; left: 90px; bottom: 70px; z-index: 5; display: grid; gap: 6px; pointer-events: none }
+  .ttl i { font: italic 400 150px/.85 "Instrument Serif", serif; letter-spacing: -.02em; background: linear-gradient(180deg, #ffe08a 0%, #ff9b45 40%, #ff5a6e 70%, #b0285e 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(5px 5px 0 rgba(22,9,37,.55)) }
+  .ttl span { font-size: 22px; color: #ffe08a; text-shadow: 2px 2px 0 #160925; padding-left: 8px }
+  .paper .ttl span { color: #b0285e; text-shadow: none }
+  .paper .ttl i { filter: drop-shadow(4px 4px 0 rgba(176,40,94,.18)) }
+  .ttl.r { left: auto; right: 90px; text-align: right; justify-items: end }
+  /* overlays */
+  #fx, #grain { position: absolute; inset: 0; pointer-events: none }
+  #fx { z-index: 60 } #grain { z-index: 59; mix-blend-mode: overlay; opacity: .5 }
+  #grade { position: absolute; inset: 0; z-index: 58; pointer-events: none; mix-blend-mode: soft-light; background: radial-gradient(ellipse at 20% 0%, rgba(255,155,69,.55), transparent 60%), radial-gradient(ellipse at 90% 100%, rgba(176,40,94,.6), transparent 60%) }
+  #vig { position: absolute; inset: 0; z-index: 57; pointer-events: none; background: radial-gradient(ellipse at 50% 50%, transparent 58%, rgba(10,3,16,.55) 100%) }
+  .lines { position: absolute; inset: 0; z-index: 56; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0,0,0,.12) 0 2px, transparent 2px 4px) }
+
+  /* intro (the cut you liked, unchanged) */
+  #s-intro .dot { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px; background: #c6f432; box-shadow: 0 0 40px #c6f43288 }
+  #s-intro .center { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 30px }
+  #s-intro .kicker { font-size: 26px; color: #c6f432; height: 30px }
+  #s-intro piix-flap { font-size: 150px }
+
+  /* hero */
+  piix-hero::part(content) { transition: none !important; opacity: 1 !important; transform: none !important }
+  #h-hero piix-hero p.eyebrow { color: #ffe08a }
+  /* text */
+  #h-text .grid { position: absolute; inset: 80px 120px 220px; display: grid; grid-template-columns: 1fr 1fr; align-content: center; gap: 20px 80px; font-size: 168px; font-weight: 800; letter-spacing: -.05em; line-height: 1 }
+  /* tiles */
+  .tiles { position: absolute; inset: 40px; display: grid; gap: 14px }
+  .tiles > * { position: relative; overflow: hidden }
+  .t5x2 { grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(2, 1fr) }
+  .tiles .lab { position: absolute; left: 14px; top: 12px; z-index: 2; font-size: 15px; color: #fff; text-shadow: 2px 2px 0 #160925 }
+  /* buttons, forms, feedback, keys, layout: paper */
+  .center { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center }
+  #h-buttons .rows { display: grid; gap: 50px; justify-items: center; transform: scale(2.3); margin-top: -120px }
+  #h-buttons .row, .row { display: flex; gap: 26px; align-items: center; justify-content: center }
+  #h-cards .row { gap: 34px; transform: scale(1.75); margin-top: -100px }
+  #h-cards piix-glow-card { width: 300px }
+  .price { margin: 4px 0 6px; font-size: 56px; font-weight: 800; letter-spacing: -.04em }
+  .price small { font-size: 20px; opacity: .6 }
+  #h-forms .panel { width: 560px; display: grid; gap: 22px; padding: 34px; background: #fffaf3; box-shadow: 0 0 0 3px var(--ink), 12px 12px 0 var(--coral); transform: scale(1.32); margin-top: -110px }
+  #h-forms .row { justify-content: flex-start }
+  #h-data .grid { position: absolute; inset: 70px 90px 240px; display: grid; grid-template-columns: 1.5fr 1fr; grid-template-rows: auto 1fr; gap: 22px }
+  #h-data .stats { grid-column: 1 / -1; display: flex; gap: 70px; padding: 6px 4px }
+  #h-data .panel { background: rgba(22,9,37,.6); box-shadow: inset 0 0 0 2px #4d1650; padding: 22px }
+  #h-board .wrap { position: absolute; left: 120px; top: 110px; display: grid; gap: 18px }
+  #h-board piix-flap { font-size: 92px }
+  #h-board .mq { position: absolute; left: 0; right: 0; bottom: 300px; font: italic 400 110px/1 "Instrument Serif", serif; color: #ff9b45 }
+  #h-board .mq span { padding: 0 10px }
+  #h-feed .loaders { display: flex; gap: 60px; margin-top: -150px }
+  #h-feed .bars { display: grid; gap: 50px; width: 900px; margin-top: 70px }
+  #h-media .tiles { grid-template-columns: repeat(3, 1fr); inset: 40px 40px 200px }
+  #h-motion .stack { position: absolute; inset: 0; display: grid; grid-template-rows: repeat(4, 1fr) }
+  #h-motion .stack > div { position: relative }
+  #h-keys .k { transform: scale(5.2); display: flex; gap: 6px; margin-top: -120px }
+  #h-layout .nav { position: absolute; left: 90px; right: 90px; top: 50px; display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 30px }
+  #h-layout .nav span { display: flex; gap: 40px; font-weight: 500; font-size: 22px; opacity: .7 }
+  #h-layout .hd { position: absolute; left: 0; right: 0; top: 170px; text-align: center; display: grid; justify-items: center; gap: 22px }
+  #h-layout h2 { margin: 0; font-size: 116px; font-weight: 800; letter-spacing: -.055em; line-height: .9 }
+  #h-layout .band { position: absolute; left: 0; right: 0; bottom: 0; height: 470px }
+  #h-looks .row { gap: 30px; transform: scale(1.55); margin-top: -90px }
+  #h-looks piix-glow-card { width: 290px }
+  piix-dialog::part(dialog) { zoom: 1.9 }
+  piix-tooltip { zoom: 1.6 }
+  /* mosaic */
+  #s-mosaic .mos { position: absolute; left: 50%; top: 50%; width: 3200px; height: 1800px; margin: -900px -1600px; display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(4, 1fr); gap: 16px }
+  #s-mosaic .mos > div { position: relative; overflow: hidden; display: grid; place-items: center; background: #160925 }
+  /* outro */
+  #s-outro .center { gap: 24px; text-align: center }
+  #s-outro img { width: 140px; height: 140px; image-rendering: pixelated }
+  #s-outro .big { font: italic 400 230px/.82 "Instrument Serif", serif; background: linear-gradient(180deg, #fff3c4, #ffe08a 30%, #ff9b45 60%, #ff5a6e 85%, #b0285e); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(6px 6px 0 rgba(22,9,37,.6)) }
+  #s-outro .sub { font-size: 24px; color: #ffe08a; text-shadow: 2px 2px 0 #160925 }
+  #s-outro .url { padding: 16px 26px; font-size: 32px; background: #ffe08a; color: #160925; box-shadow: 6px 6px 0 #b0285e }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><filter id="trip" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+  <feTurbulence id="turb" type="fractalNoise" baseFrequency="0.0035 0.008" numOctaves="2" seed="4" result="n"/>
+  <feDisplacementMap id="disp" in="SourceGraphic" in2="n" scale="8" xChannelSelector="R" yChannelSelector="G" result="d"/>
+  <feColorMatrix in="d" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r"/>
+  <feOffset id="offr" in="r" dx="3" dy="0" result="r2"/>
+  <feColorMatrix in="d" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g"/>
+  <feColorMatrix in="d" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b"/>
+  <feOffset id="offb" in="b" dx="-3" dy="0" result="b2"/>
+  <feBlend in="r2" in2="g" mode="screen" result="rg"/>
+  <feBlend in="rg" in2="b2" mode="screen"/>
+</filter></svg>
+<div id="stage"><div id="world">
+
+  <section class="shot" id="s-intro"><div class="cam">
+    <piix-shader kind="dots" palette="lime" fill pixel="6" class="bg" id="intro-bg"></piix-shader>
+    <div class="dot"></div>
+    <div class="center"><div class="kicker pix" id="kicker"></div><piix-flap id="ftitle" length="10"></piix-flap></div>
+  </div></section>
+
+  <section class="shot" id="h-hero"><div class="cam">
+    <piix-hero kind="horizon" palette="sunset" height="1080px" pixel="5" id="hero">
+      <p class="eyebrow">New · Pixel UI</p>
+      <h1>Build something <piix-text effect="shine" palette="sunset" pixel="4">loud</piix-text></h1>
+      <p>Components that glow, drawn on the GPU.</p>
+      <piix-glow-button palette="sunset" size="lg">Get started</piix-glow-button>
+    </piix-hero></div></section>
+
+  <section class="shot plum" id="h-text"><div class="cam"><div class="grid">
+    <piix-text effect="shine" palette="sunset" pixel="4">Shine</piix-text>
+    <piix-text effect="wave" palette="sunset" pixel="4">Dreamy</piix-text>
+    <piix-text effect="glitch" palette="candy" pixel="4">Glitch</piix-text>
+    <piix-text effect="melt" palette="fire" pixel="4">Melting</piix-text>
+    <piix-text effect="scan" palette="sunset" pixel="4">Scanline</piix-text>
+    <piix-text effect="reveal" palette="sunset" pixel="4">Reveal</piix-text>
+  </div></div><div class="ttl"><i>Text</i><span class="pix">6 effects</span></div></section>
+
+  <section class="shot" id="h-bgs" style="background:#160925"><div class="cam"><div class="tiles t5x2">
+    <div><piix-shader kind="mesh" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-shader kind="warp" palette="sunset" fill pixel="5"></piix-shader></div>
+    <div><piix-shader kind="aurora" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-shader kind="crystal" palette="sunset" fill pixel="5"></piix-shader></div>
+    <div><piix-shader kind="liquid" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-shader kind="horizon" palette="sunset" fill pixel="5"></piix-shader></div>
+    <div><piix-shader kind="nebula" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-shader kind="topo" palette="sunset" fill pixel="5"></piix-shader></div>
+    <div><piix-shader kind="dots" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-shader kind="fire" palette="sunset" fill pixel="5"></piix-shader></div>
+  </div></div><div class="ttl"><i>Backgrounds</i><span class="pix">10 shaders</span></div></section>
+
+  <section class="shot" id="h-scenes" style="background:#160925"><div class="cam"><div class="tiles t5x2">
+    <div><piix-scene kind="lake" fill pixel="4"></piix-scene></div><div><piix-scene kind="castle" palette="sunset" fill pixel="4"></piix-scene></div>
+    <div><piix-scene kind="sakura" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-scene kind="galaxy" palette="sunset" fill pixel="4"></piix-scene></div>
+    <div><piix-scene kind="vista" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-scene kind="rays" palette="#160925,#b0285e,#ffe08a" fill pixel="4"></piix-scene></div>
+    <div><piix-scene kind="poppies" fill pixel="4"></piix-scene></div><div><piix-scene kind="alps" palette="sunset" fill pixel="4"></piix-scene></div>
+    <div><piix-scene kind="train" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-scene kind="vortex" palette="#160925,#ff5a6e,#ffe08a" fill pixel="4"></piix-scene></div>
+  </div></div><div class="ttl"><i>Scenes</i><span class="pix">10 worlds</span></div></section>
+
+  <section class="shot paper" id="h-buttons"><div class="cam"><div class="center"><div class="rows">
+    <div class="row"><piix-glow-button palette="sunset" size="sm">Small</piix-glow-button><piix-glow-button palette="sunset">Get started</piix-glow-button><piix-glow-button palette="fire" size="lg">Launch</piix-glow-button></div>
+    <div class="row"><piix-button tone="coral" pal="frog">Deploy</piix-button><piix-button tone="sun" pal="pip">Subscribe</piix-button><piix-button tone="ink">Sign in</piix-button></div>
+    <div class="row"><piix-glow-button look="chrome">Chrome</piix-glow-button><piix-glow-button look="riso" palette="#4d1650,#ff5a6e,#ffe8cf">Riso</piix-glow-button><piix-glow-button look="crt" palette="fire">Terminal</piix-glow-button></div>
+  </div></div></div><div class="ttl"><i>Buttons</i><span class="pix">2 kinds · 5 looks</span></div></section>
+
+  <section class="shot" id="h-cards"><div class="cam"><div class="bg"><piix-shader kind="warp" palette="sunset" fill pixel="6"></piix-shader></div><div class="center"><div class="row">
+    <piix-glow-card palette="sunset"><h3>Realtime</h3><p>Live on every device.</p></piix-glow-card>
+    <piix-glow-card palette="fire"><p class="pix" style="margin:0;font-size:12px;opacity:.7">Pro</p><div class="price">$0<small>/forever</small></div><piix-glow-button palette="fire" size="sm">Get it</piix-glow-button></piix-glow-card>
+    <piix-glow-card palette="candy"><h3>On the GPU</h3><p>Shaders on a pixel grid.</p></piix-glow-card>
+  </div></div></div><div class="ttl"><i>Cards</i><span class="pix">glow · tilt · light</span></div></section>
+
+  <section class="shot paper" id="h-forms"><div class="cam"><div class="center"><div class="panel">
+    <piix-tabs palette="sunset"><div label="Sign up"></div><div label="Log in"></div><div label="Team"></div></piix-tabs>
+    <piix-input palette="sunset" placeholder="you@studio.com" value="hello@sunset.fm">Email</piix-input>
+    <piix-slider value="72" palette="sunset" suffix="%">Warmth</piix-slider>
+    <div class="row"><piix-checkbox checked tone="coral">Send me updates</piix-checkbox><piix-toggle checked pal="penguin" tone="sun">Dark mode</piix-toggle></div>
+  </div></div></div><div class="ttl r"><i>Forms</i><span class="pix">input · tabs · slider · toggles</span></div></section>
+
+  <section class="shot plum" id="h-data"><div class="cam"><div class="grid">
+    <div class="stats"><piix-stat value="48210" suffix="+" tone="sun">listeners</piix-stat><piix-stat value="99.98" decimals="2" suffix="%" tone="coral">uptime</piix-stat><piix-stat value="2.4" decimals="1" prefix="$" suffix="M" tone="sun">raised</piix-stat></div>
+    <div class="panel"><piix-chart values="12,18,14,24,30,26,38,34,42,48,44,56,61,58,72" palette="sunset" height="100%"></piix-chart></div>
+    <div class="panel"><piix-chart kind="bars" values="4,7,5,9,12,8,14" palette="fire" height="100%"></piix-chart></div>
+  </div></div><div class="ttl"><i>Data</i><span class="pix">charts · counters</span></div></section>
+
+  <section class="shot" id="h-over"><div class="cam"><div class="bg"><piix-shader kind="mesh" palette="sunset" fill pixel="6"></piix-shader></div>
+    <div style="position:absolute;right:220px;top:200px"><piix-tooltip tip="Copied to clipboard" id="tip"><piix-button tone="sun" size="lg">Share</piix-button></piix-tooltip></div>
+  </div><div class="ttl"><i>Overlays</i><span class="pix">dialog · toast · tooltip</span></div></section>
+  <piix-dialog id="dlg" palette="sunset" width="520px"><h2>Ship it?</h2><p>14 changes, warm and ready.</p><piix-glow-button palette="sunset" size="lg" id="dlg-go">Deploy</piix-glow-button></piix-dialog>
+
+  <section class="shot plum" id="h-board"><div class="cam">
+    <div class="wrap"><piix-flap class="row2" length="14" theme="amber" data-text="NOW SHOWING"></piix-flap><piix-flap class="row2" length="14" theme="amber" data-text="PIXEL UI 7PM"></piix-flap><piix-flap countdown="2026-09-26T09:00:00" theme="amber" style="font-size:64px"></piix-flap></div>
+    <div class="mq"><piix-marquee speed="320" gap="60" fade="200"><span>warm</span><span>✺</span><span>dreamy</span><span>✺</span><span>loud</span><span>✺</span><span>pixel</span><span>✺</span><span>golden hour</span><span>✺</span></piix-marquee></div>
+  </div><div class="ttl r"><i>Flap &amp; marquee</i><span class="pix">departures · loops</span></div></section>
+
+  <section class="shot paper" id="h-feed"><div class="cam"><div class="center">
+    <div class="loaders"><piix-loader size="130" palette="sunset"></piix-loader><piix-loader kind="orbit" size="130" palette="sunset"></piix-loader><piix-loader kind="snake" size="130" palette="fire"></piix-loader><piix-loader kind="bars" size="130" palette="sunset"></piix-loader><piix-loader kind="pulse" size="130" palette="candy"></piix-loader></div>
+    <div class="bars"><piix-progress value="64" pal="bitbug" tone="coral" segments="24"></piix-progress><piix-progress pal="penguin" tone="sun" segments="24"></piix-progress></div>
+  </div></div><div class="ttl"><i>Feedback</i><span class="pix">loaders · progress</span></div></section>
+
+  <section class="shot" id="h-media" style="background:#160925"><div class="cam"><div class="tiles">
+    <div><piix-pixel-image src="../site/launch-poster.jpg" palette="sunset" height="100%" lens="none"></piix-pixel-image></div>
+    <div><piix-pixel-image src="../site/launch-poster.jpg" effect="halftone" palette="sunset" height="100%" lens="none"></piix-pixel-image></div>
+    <div><piix-pixel-image src="../site/launch-poster.jpg" effect="mosaic" height="100%" lens="none" pixel="6"></piix-pixel-image></div>
+  </div></div><div class="ttl"><i>Media</i><span class="pix">dither · halftone · mosaic</span></div></section>
+
+  <section class="shot" id="h-motion"><div class="cam"><div class="stack">
+    <div style="background:#160925"><piix-divider kind="wave" from="#160925" to="#4d1650" palette="sunset" height="100%"></piix-divider></div>
+    <div style="background:#4d1650"><piix-divider kind="mountains" from="#4d1650" to="#b0285e" palette="sunset" height="100%"></piix-divider></div>
+    <div style="background:#b0285e"><piix-divider kind="stairs" from="#b0285e" to="#ff5a6e" palette="sunset" height="100%"></piix-divider></div>
+    <div style="background:#ff5a6e"><piix-divider kind="drip" from="#ff5a6e" to="#ff9b45" palette="sunset" height="100%"></piix-divider></div>
+  </div><piix-cursor palette="sunset" size="2.6" id="cur"></piix-cursor></div><div class="ttl r"><i>Motion</i><span class="pix">dividers · reveal · cursor</span></div></section>
+
+  <section class="shot paper" id="h-keys"><div class="cam"><div class="center">
+    <div class="k"><piix-kbd id="k1" size="lg">⌘</piix-kbd><piix-kbd id="k2" size="lg">K</piix-kbd><piix-kbd id="k3" size="lg" theme="dark">↵</piix-kbd></div>
+  </div></div><div class="ttl"><i>Keycaps</i><span class="pix">press the real key</span></div></section>
+
+  <section class="shot paper" id="h-layout"><div class="cam">
+    <div class="nav">Sunset FM<span><b>Shows</b><b>Archive</b><b>Join</b></span></div>
+    <div class="hd"><p class="pix" style="margin:0;color:#b0285e;font-size:20px">Radio for golden hour</p><h2>Stay till the sun goes down.</h2><piix-button tone="coral" pal="pip">Tune in</piix-button></div>
+    <div class="band"><piix-scene kind="lake" sky="none" fill pixel="5"></piix-scene></div>
+  </div><div class="ttl r" style="bottom:auto;top:40px;right:90px"><span class="pix" style="color:#b0285e">Layouts · normal page, pixel band</span></div></section>
+
+  <section class="shot plum" id="h-looks"><div class="cam"><div class="center"><div class="row">
+    <piix-glow-card palette="sunset"><h3>Glow</h3><p>The default.</p></piix-glow-card>
+    <piix-glow-card look="chrome"><h3>Chrome</h3><p>Liquid metal.</p></piix-glow-card>
+    <piix-glow-card look="riso" palette="#4d1650,#ff5a6e,#ffe8cf"><h3>Riso</h3><p>Two inks.</p></piix-glow-card>
+    <piix-glow-card look="crt" palette="fire"><h3>Terminal</h3><p>Amber phosphor.</p></piix-glow-card>
+  </div></div></div><div class="ttl"><i>Looks</i><span class="pix">one attribute</span></div></section>
+
+  <section class="shot" id="s-mosaic" style="background:#0d0514"><div class="cam"><div class="mos">
+    <div><piix-scene kind="lake" fill pixel="4"></piix-scene></div><div><piix-shader kind="warp" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-glow-card palette="sunset" style="width:70%"><h3>Realtime</h3></piix-glow-card></div>
+    <div><piix-scene kind="castle" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-loader kind="snake" size="140" palette="sunset"></piix-loader></div><div><piix-shader kind="horizon" palette="sunset" fill pixel="5"></piix-shader></div>
+    <div><piix-chart values="3,5,4,8,7,11,10,14" palette="sunset" style="width:80%" height="60%"></piix-chart></div><div><piix-scene kind="galaxy" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-glow-button palette="fire" size="lg">Launch</piix-glow-button></div>
+    <div><piix-shader kind="crystal" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-flap text="PIXEL UI" theme="amber" style="font-size:56px"></piix-flap></div><div><piix-scene kind="vista" palette="sunset" fill pixel="4"></piix-scene></div>
+    <div><piix-scene kind="poppies" fill pixel="4"></piix-scene></div><div><piix-glow-card look="chrome" style="width:70%"><h3>Chrome</h3></piix-glow-card></div><div><piix-shader kind="aurora" palette="sunset" fill pixel="5"></piix-shader></div>
+    <div><piix-text effect="wave" palette="sunset" pixel="4" style="font-size:90px;font-weight:800">Dreamy</piix-text></div><div><piix-scene kind="train" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-shader kind="fire" palette="sunset" fill pixel="5"></piix-shader></div>
+    <div><piix-scene kind="sakura" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-shader kind="nebula" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-loader kind="orbit" size="140" palette="fire"></piix-loader></div>
+    <div><piix-shader kind="liquid" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-scene kind="alps" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-shader kind="mesh" palette="sunset" fill pixel="5"></piix-shader></div>
+  </div></div><div class="ttl" id="mos-ttl"><i>One library.</i><span class="pix">55 components · free &amp; open source</span></div></section>
+
+  <section class="shot" id="s-outro"><div class="cam">
+    <div class="bg"><piix-scene kind="lake" fill pixel="5"></piix-scene></div>
+    <div class="center">
+      <img src="../site/logo.svg" alt="">
+      <div class="big">Pixel UI</div>
+      <div class="sub pix">by piixpal · scenes · looks · 55 components</div>
+      <div class="url pix">piixpal.dvkk.dev/ui</div>
+    </div>
+  </div></section>
+
+</div>
+<div class="lines"></div><div id="vig"></div><div id="grade"></div><canvas id="grain" width="480" height="270" style="width:1920px;height:1080px;image-rendering:pixelated"></canvas><canvas id="fx" width="1920" height="1080"></canvas>
+</div>
+<script src="../piixpal.js"></script>
+<script src="ui30-film.js"></script>
+</body>
+</html>
