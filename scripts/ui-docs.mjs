@@ -299,3 +299,13 @@ ${SHOWCASE.map(([id, name, kind, about, uses]) => `  <article>
 </div>
 ${pager('showcase')}`;
 
+const pages = [
+  ['showcase.html', { key: 'showcase', title: 'Showcase', desc: 'Whole pages built with Pixel UI: a clean product page, a riso magazine, a lo-fi music app and a game launch.', body: showcaseBody }],
+  ['index.html', { key: 'index', title: 'Pixel UI', desc: 'A GPU pixel component library: shader backgrounds, heroes, glow buttons, cards, text effects and form controls.', body: indexBody }],
+  ['installation.html', { key: 'installation', title: 'Installation', desc: 'Add Pixel UI with one script tag, single files or npm.', body: installBody, toc: [['script', 'Script tag'], ['single', 'Only what you use'], ['npm', 'npm'], ['frameworks', 'Frameworks'], ['support', 'Browser support']] }],
+  ['looks.html', { key: 'looks', title: 'Looks', desc: 'One component, five design languages: glow, liquid chrome, frosted glass, two-ink riso and green terminal.', body: looksBody, toc: LOOK_GUIDE.map(([id, n]) => ['look-' + id, n]) }],
+  ['palettes.html', { key: 'palettes', title: 'Palettes', desc: 'The ten Pixel UI palettes, and how to use your own colours.', body: palettesBody, toc: [['custom', 'Your own colours'], ['dither', 'Dither']] }],
+  ...UI.map(u => [u.slug + '.html', null, u])
+];
+for (const [file, p, u] of pages) writeFileSync(join(out, file), u ? compPage(u) : shell(p));
+console.log(`ui/  ${pages.length} pages (${UI.length} components in ${SECTIONS.length} sections)`);
