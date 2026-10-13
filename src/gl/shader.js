@@ -75,3 +75,12 @@ const SH_KINDS = {
     float v=(1.-uv.y)*1.3-fbm(p)*.65+.2*fbm(p*2.3)+.4*exp(-length(q-m)*5.)*u_hover;
     return vec4(dpal(pow(clamp(v,0.,1.),1.5),cell),1.);}`]
 };
+class PiixShaderElement extends GLStage {
+  get kind() { const k = this.getAttribute('kind'); return SH_KINDS[k] ? k : 'mesh'; }
+  get _defPal() { return SH_KINDS[this.kind][0]; }
+  _hostCss() { return (this.hasAttribute('fill') ? '' : 'width:100%;') + (this.hasAttribute('fill') || this.getAttribute('height') ? '' : 'height:360px;'); }
+  _setup() { if (!this.hasAttribute('aria-label') && !this.hasAttribute('fill')) { this.setAttribute('role', 'img'); this.setAttribute('aria-label', `An animated ${this.kind} background`); } if (this.hasAttribute('fill')) this.setAttribute('aria-hidden', 'true'); }
+  _shader() { return SH_KINDS[this.kind][1]; }
+}
+define('piix-shader', PiixShaderElement);
+ELEMENTS.shader = 'piix-shader';
