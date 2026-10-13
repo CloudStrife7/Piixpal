@@ -55,3 +55,5 @@ class PiixPixelImageElement extends GLStage {
     return { u_k: [PI_FX[this.getAttribute('effect')] ?? 0, this.getAttribute('lens') === 'none' ? 0 : 1, 0, 0], u_j: [s[0], s[1], 0, 0] };
   }
 }
+define('piix-pixel-image', PiixPixelImageElement);
+ELEMENTS['pixel-image'] = 'piix-pixel-image';
