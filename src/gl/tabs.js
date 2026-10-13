@@ -75,3 +75,5 @@ class PiixTabsElement extends GLStage {
     return { u_k: [this._x[0], this._x[1], this._v, 0] };
   }
 }
+define('piix-tabs', PiixTabsElement);
+ELEMENTS.tabs = 'piix-tabs';
