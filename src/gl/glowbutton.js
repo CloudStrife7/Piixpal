@@ -42,3 +42,5 @@ button:focus-visible{outline:2px dashed ${this._pal.list[this._pal.list.length -
   _shader() { return GL_LOOKS[glLook(this)][1]; }
   _uniforms() { return { u_k: [this._click[0], this._click[1], (now() - this._click[2]) / 1000, 2], u_j: [this._hov * .04, 0, 0, 0] }; }
 }
+define('piix-glow-button', PiixGlowButtonElement);
+ELEMENTS['glow-button'] = 'piix-glow-button';
