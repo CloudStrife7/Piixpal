@@ -45,3 +45,31 @@ vec3 pal(float v){v=clamp(v,0.,1.)*(u_n-1.);vec3 c=u_pal[0];for(int i=1;i<6;i++)
 vec3 dpal(float v,vec2 cell){float n=u_n-1.;float q=clamp(v,0.,1.)*n+(bayer8(cell)-.5)*u_dither;return pal(floor(q+.5)/n);}
 vec2 aspect(vec2 uv){return (uv-.5)*vec2(u_res.x/u_res.y,1.);}
 `;
+/* and ends with: one pixel per fragment, plus the pixel-dissolve intro every component can use */
+const GL_MAIN = `
+void main(){vec2 cell=floor(gl_FragCoord.xy);vec2 uv=(cell+.5)/u_res;vec4 c=effect(uv,cell);
+if(u_intro<1.){float th=bayer8(cell)*.75+(1.-uv.y)*.25;if(th>u_intro)c.a=0.;}
+gl_FragColor=vec4(c.rgb*c.a,c.a);}`;
+
+const glInit = () => {
+  if (GL.ok !== null) return GL.ok && !GL.lost;
+  try {
+    const cv = document.createElement('canvas');
+    const gl = cv.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: false, powerPreference: 'low-power' });
+    if (!gl) return (GL.ok = false);
+    GL.cv = cv; GL.gl = gl;
+    /* compile shaders in the background where the browser can, so a big one never freezes the page */
+    GL.par = gl.getExtension('KHR_parallel_shader_compile');
+    const setup = () => {
+      GL.buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, GL.buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    };
+    setup();
+    /* if the GPU resets, drop everything and rebuild when it comes back */
+    cv.addEventListener('webglcontextlost', e => { e.preventDefault(); GL.lost = true; GL.progs = {}; GL.tex = new WeakMap(); });
+    cv.addEventListener('webglcontextrestored', () => { GL.lost = false; setup(); });
+    return (GL.ok = true);
+  } catch (_) { return (GL.ok = false); }
+};
+
