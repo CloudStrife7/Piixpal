@@ -39,3 +39,5 @@ class PiixGlowCardElement extends GLStage {
     return { u_k: [this._click[0], this._click[1], (now() - this._click[2]) / 1000, 1], u_j: [.02, 0, 0, 0] };
   }
 }
+define('piix-glow-card', PiixGlowCardElement);
+ELEMENTS['glow-card'] = 'piix-glow-card';
