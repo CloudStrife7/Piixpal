@@ -73,6 +73,10 @@
   #s-intro .kicker { font-size: 26px; color: #c6f432; height: 30px }
   #s-intro piix-flap { font-size: 150px }
 
+  /* sakura, in its own colours */
+  #s-sakura .sw { position: absolute; left: 96px; bottom: 120px; font-size: 200px; font-weight: 800; letter-spacing: -.055em; line-height: .86; color: #fff; text-shadow: 8px 8px 0 rgba(0,0,0,.45) }
+  #s-sakura .stag { position: absolute; left: 104px; bottom: 74px; padding: 10px 16px; font-size: 26px; background: rgba(8,7,13,.82); color: #c6f432 }
+  #s-sakura .scount { position: absolute; right: 96px; top: 80px; font-size: 26px; color: #fff; text-shadow: 3px 3px 0 #000 }
   /* hero */
   piix-hero::part(content) { transition: none !important; opacity: 1 !important; transform: none !important }
   #h-hero piix-hero p.eyebrow { color: #ffe08a }
@@ -146,6 +150,9 @@
     <div class="center"><div class="kicker pix" id="kicker"></div><piix-flap id="ftitle" length="10"></piix-flap></div>
   </div></section>
 
+  <section class="shot" id="s-sakura"><div class="cam"><div class="bg"><piix-scene kind="sakura" fill pixel="5"></piix-scene></div></div>
+    <div class="sw">Sakura</div><div class="stag mono">&lt;piix-scene kind="sakura"&gt;</div><div class="scount pix">Scenes · 01 / 10</div></section>
+
   <section class="shot" id="h-hero"><div class="cam">
     <piix-hero kind="horizon" palette="sunset" height="1080px" pixel="5" id="hero">
       <p class="eyebrow">New · Pixel UI</p>
@@ -172,12 +179,12 @@
   </div></div><div class="ttl"><i>Backgrounds</i><span class="pix">10 shaders</span></div></section>
 
   <section class="shot" id="h-scenes" style="background:#160925"><div class="cam"><div class="tiles t5x2">
-    <div><piix-scene kind="lake" fill pixel="4"></piix-scene></div><div><piix-scene kind="castle" palette="sunset" fill pixel="4"></piix-scene></div>
-    <div><piix-scene kind="sakura" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-scene kind="galaxy" palette="sunset" fill pixel="4"></piix-scene></div>
-    <div><piix-scene kind="vista" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-scene kind="rays" palette="#160925,#b0285e,#ffe08a" fill pixel="4"></piix-scene></div>
-    <div><piix-scene kind="poppies" fill pixel="4"></piix-scene></div><div><piix-scene kind="alps" palette="sunset" fill pixel="4"></piix-scene></div>
-    <div><piix-scene kind="train" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-scene kind="vortex" palette="#160925,#ff5a6e,#ffe08a" fill pixel="4"></piix-scene></div>
-  </div></div><div class="ttl"><i>Scenes</i><span class="pix">10 worlds</span></div></section>
+    <div><piix-scene kind="lake" fill pixel="4"></piix-scene></div><div><piix-scene kind="castle" fill pixel="4"></piix-scene></div>
+    <div><piix-scene kind="sakura" fill pixel="4"></piix-scene></div><div><piix-scene kind="galaxy" fill pixel="4"></piix-scene></div>
+    <div><piix-scene kind="vista" fill pixel="4"></piix-scene></div><div><piix-scene kind="rays" fill pixel="4"></piix-scene></div>
+    <div><piix-scene kind="poppies" fill pixel="4"></piix-scene></div><div><piix-scene kind="alps" fill pixel="4"></piix-scene></div>
+    <div><piix-scene kind="train" fill pixel="4"></piix-scene></div><div><piix-scene kind="vortex" fill pixel="4"></piix-scene></div>
+  </div></div><div class="ttl"><i>Scenes</i><span class="pix">10 worlds, in their own colours</span></div></section>
 
   <section class="shot paper" id="h-buttons"><div class="cam"><div class="center"><div class="rows">
     <div class="row"><piix-glow-button palette="sunset" size="sm">Small</piix-glow-button><piix-glow-button palette="sunset">Get started</piix-glow-button><piix-glow-button palette="fire" size="lg">Launch</piix-glow-button></div>
@@ -251,13 +258,13 @@
 
   <section class="shot" id="s-mosaic" style="background:#0d0514"><div class="cam"><div class="mos">
     <div><piix-scene kind="lake" fill pixel="4"></piix-scene></div><div><piix-shader kind="warp" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-glow-card palette="sunset" style="width:70%"><h3>Realtime</h3></piix-glow-card></div>
-    <div><piix-scene kind="castle" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-loader kind="snake" size="140" palette="sunset"></piix-loader></div><div><piix-shader kind="horizon" palette="sunset" fill pixel="5"></piix-shader></div>
-    <div><piix-chart values="3,5,4,8,7,11,10,14" palette="sunset" style="width:80%" height="60%"></piix-chart></div><div><piix-scene kind="galaxy" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-glow-button palette="fire" size="lg">Launch</piix-glow-button></div>
-    <div><piix-shader kind="crystal" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-flap text="PIXEL UI" theme="amber" style="font-size:56px"></piix-flap></div><div><piix-scene kind="vista" palette="sunset" fill pixel="4"></piix-scene></div>
+    <div><piix-scene kind="castle" fill pixel="4"></piix-scene></div><div><piix-loader kind="snake" size="140" palette="sunset"></piix-loader></div><div><piix-shader kind="horizon" palette="sunset" fill pixel="5"></piix-shader></div>
+    <div><piix-chart values="3,5,4,8,7,11,10,14" palette="sunset" style="width:80%" height="60%"></piix-chart></div><div><piix-scene kind="galaxy" fill pixel="4"></piix-scene></div><div><piix-glow-button palette="fire" size="lg">Launch</piix-glow-button></div>
+    <div><piix-shader kind="crystal" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-flap text="PIXEL UI" theme="amber" style="font-size:56px"></piix-flap></div><div><piix-scene kind="vista" fill pixel="4"></piix-scene></div>
     <div><piix-scene kind="poppies" fill pixel="4"></piix-scene></div><div><piix-glow-card look="chrome" style="width:70%"><h3>Chrome</h3></piix-glow-card></div><div><piix-shader kind="aurora" palette="sunset" fill pixel="5"></piix-shader></div>
-    <div><piix-text effect="wave" palette="sunset" pixel="4" style="font-size:90px;font-weight:800">Dreamy</piix-text></div><div><piix-scene kind="train" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-shader kind="fire" palette="sunset" fill pixel="5"></piix-shader></div>
-    <div><piix-scene kind="sakura" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-shader kind="nebula" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-loader kind="orbit" size="140" palette="fire"></piix-loader></div>
-    <div><piix-shader kind="liquid" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-scene kind="alps" palette="sunset" fill pixel="4"></piix-scene></div><div><piix-shader kind="mesh" palette="sunset" fill pixel="5"></piix-shader></div>
+    <div><piix-text effect="wave" palette="sunset" pixel="4" style="font-size:90px;font-weight:800">Dreamy</piix-text></div><div><piix-scene kind="train" fill pixel="4"></piix-scene></div><div><piix-shader kind="fire" palette="sunset" fill pixel="5"></piix-shader></div>
+    <div><piix-scene kind="sakura" fill pixel="4"></piix-scene></div><div><piix-shader kind="nebula" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-loader kind="orbit" size="140" palette="fire"></piix-loader></div>
+    <div><piix-shader kind="liquid" palette="sunset" fill pixel="5"></piix-shader></div><div><piix-scene kind="alps" fill pixel="4"></piix-scene></div><div><piix-shader kind="mesh" palette="sunset" fill pixel="5"></piix-shader></div>
   </div></div><div class="ttl" id="mos-ttl"><i>One library.</i><span class="pix">55 components · free &amp; open source</span></div></section>
 
   <section class="shot" id="s-outro"><div class="cam">
