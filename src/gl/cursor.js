@@ -49,3 +49,5 @@ class PiixCursorElement extends GLStage {
     return { u_tr: this._tr, u_k: [this.getAttribute('kind') === 'glow' ? 1 : 0, clamp(+this.getAttribute('size') || 1, .5, 3), 0, 0] };
   }
 }
+define('piix-cursor', PiixCursorElement);
+ELEMENTS.cursor = 'piix-cursor';
