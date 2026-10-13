@@ -10,3 +10,14 @@ node video/render.mjs           # every frame, with sound -> video/out/piixpal-l
 
 Needs Microsoft Edge (set `EDGE` to use another Chromium) and `ffmpeg` on your PATH. To watch it live while editing, serve the repo and open `video/launch.html` (`?t=12` jumps to 12s).
 Stills for review: `node video/render.mjs --stills 4,9.5,20`.
+
+## The Pixel UI film
+
+A 42-second film built from the real Pixel UI components (scenes, looks, flap boards, charts, dialog, toasts, keycaps), cut to a 128 BPM track with two drops.
+
+```bash
+node video/beat.mjs                                                              # the track -> video/out/pixelui.wav
+PAGE=ui-launch.html NAME=pixelui-launch WAV=pixelui.wav node video/render.mjs    # -> video/out/pixelui-launch.mp4
+```
+
+The page's clock drives animation frames, timers and CSS animations, so every render is identical. Watch it live at `video/ui-launch.html`.
