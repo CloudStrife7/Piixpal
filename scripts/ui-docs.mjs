@@ -283,3 +283,19 @@ ${demoBox({ demo: `<piix-glow-button look="${id}">Get started</piix-glow-button>
 ${pager('looks')}`;
 
 /* ---------- showcase: whole pages built with Pixel UI ---------- */
+const SHOWCASE = [
+  ['summit', 'Summit', 'Clean product page', 'An ordinary, calm SaaS page. The only pixels are landscapes: alps rising out of the hero with the sky cut out, scene cards instead of stock photos, and a vista dissolving into the footer.', ['alps', 'vista', 'lake', 'castle', 'poppies', 'counter', 'button']],
+  ['riso', 'Night Roads', 'Two-ink riso magazine', 'Blue ink on warm paper, everywhere. The riso scenes are the cover art; a serif, hairline rules and a paper grain do the rest.', ['riso-rays', 'riso-vortex']],
+  ['bloom', 'Bloom', 'Lo-fi music app', 'A full sakura hero with shine text, then soft glassy cards over a dark page, a marquee, pal toggles and a sticky player with a running progress bar.', ['sakura', 'hero', 'shine-text', 'marquee', 'toggle', 'progress', 'loader', 'cursor']],
+  ['keep', 'Keep', 'Cosy game launch', 'Fully pixel: the castle hero with glitch type, stair dividers, glow cards, counters, tabs and a sign-up form, ending on the castle again, repainted in violet and fading in.', ['castle', 'hero', 'glitch-text', 'divider', 'glow-card', 'counter', 'tabs', 'input']]
+];
+const showcaseBody = `${head(['Get started'], 'Showcase', 'Whole pages built with Pixel UI, each in a different design language: some fully pixel, some ordinary pages with just a piece of pixel art woven in. Open one, view the source, take what you like.')}
+<div class="ui-show">
+${SHOWCASE.map(([id, name, kind, about, uses]) => `  <article>
+    <a class="shot" href="showcase/${id}.html" target="_blank" rel="noopener"><img src="showcase/${id}.jpg" alt="The ${name} page" loading="lazy" width="720" height="450"></a>
+    <div><p class="k">${kind}</p><h2><a href="showcase/${id}.html" target="_blank" rel="noopener">${name} ↗</a></h2><p>${about}</p>
+    <p class="uses">${uses.map(s => `<a href="${s}.html">${esc(nameOf(s))}</a>`).join('')}</p></div>
+  </article>`).join('\n')}
+</div>
+${pager('showcase')}`;
+
