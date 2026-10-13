@@ -55,3 +55,5 @@ ${CHECK_PX.map(([x, y], i) => `.face b:nth-child(${i + 1}){left:${x * p}px;top:$
     if (this._int) this._int.setFormValue(this.checked ? (this.getAttribute('value') || 'on') : null);
   }
 }
+define('piix-checkbox', PiixCheckboxElement);
+ELEMENTS.checkbox = 'piix-checkbox';
