@@ -106,3 +106,5 @@ class PiixFlapElement extends HTMLElement {
     tile._done = setTimeout(() => { dn.firstChild.textContent = b; fu.firstChild.textContent = b; tile.classList.remove('go'); }, ms * 2);
   }
 }
+define('piix-flap', PiixFlapElement);
+ELEMENTS.flap = 'piix-flap';
