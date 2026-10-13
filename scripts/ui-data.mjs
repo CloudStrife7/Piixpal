@@ -69,3 +69,30 @@ const bgPage = ([kind, slug, name, pal, brief, about]) => ({
   a11y: ['It is decoration: hidden from screen readers.', 'With reduced motion it renders one still frame.', 'It only draws while it is on screen, and every Pixel UI component shares one GPU context.']
 });
 
+/* ---------- text: one page per effect ---------- */
+const TX = [
+  ['shine', 'shine-text', 'Shine text', 'lime', 'A dithered band of colour that sweeps across the words.', 'A wide band of light slides through the letters every few seconds, stepping through the palette in dithered pixels. Good for one word in a headline.'],
+  ['reveal', 'reveal-text', 'Reveal text', 'aurora', 'Words that resolve out of a mosaic when they scroll into view.', 'The words start as big chunky blocks and resolve, pixel size by pixel size, into crisp letters the first time they come on screen.'],
+  ['glitch', 'glitch-text', 'Glitch text', 'candy', 'Colour split and slipping rows, in bursts.', 'Every so often the text tears: rows slip sideways, the colour channels split apart, and blocks of noise flash through. Between bursts it holds still, so it stays readable.'],
+  ['wave', 'wave-text', 'Wave text', 'ocean', 'Letters that ripple like a flag.', 'The words ride a travelling wave, pixel column by pixel column, and the colour follows the crest. Hover and the wave grows.'],
+  ['melt', 'melt-text', 'Melt text', 'fire', 'Letters that drip and melt down the page.', 'Columns of the letters slide down at different speeds and drip, then pull themselves back up. A bit unhinged, in a good way.'],
+  ['scan', 'scan-text', 'Scan text', 'aurora', 'A scanline that sweeps down, lighting the letters as it passes.', 'A bright scanline rolls down through the words like an old CRT, lighting up each row as it passes and leaving a dithered afterglow.']
+];
+const txPage = ([effect, slug, name, pal, brief, about]) => ({
+  slug, name, section: 'Text', tag: 'piix-text', file: 'text', brief, about,
+  demo: `<h1 class="ex-h1"><piix-text effect="${effect}"${pal === 'lime' ? '' : ` palette="${pal}"`}>Pixel perfect</piix-text></h1>`,
+  code: `<h1>\n  <piix-text effect="${effect}"${pal === 'lime' ? '' : ` palette="${pal}"`}>Pixel perfect</piix-text>\n</h1>`,
+  stage: { h: 260 },
+  controls: [['palette', 'Palette', 'palette', pal], ['pixel', 'Pixel', 'range', [1, 6, 1, 2]]],
+  examples: [
+    { name: 'One word in a headline', note: 'It takes the font, size and weight of wherever you put it, so it drops straight into your own heading.',
+      demo: `<h2 class="ex-h2">Build something <piix-text effect="${effect}" palette="sunset">loud</piix-text></h2>` },
+    { name: 'Chunkier pixels', demo: `<h2 class="ex-h2"><piix-text effect="${effect}" pixel="4" palette="${pal === 'candy' ? 'gameboy' : 'candy'}">Big pixels</piix-text></h2>` }
+  ],
+  props: [
+    ['effect', '<code>shine</code> <code>reveal</code> <code>glitch</code> <code>wave</code> <code>melt</code> <code>scan</code>', 'shine'],
+    PAL_PROP('lime'), PX_PROP(2)
+  ],
+  a11y: ['The real words stay in the page, so screen readers, search engines and copy-paste all see normal text.', 'With reduced motion the effect holds on a readable frame.', 'One line of text: it doesn\'t wrap.']
+});
+
