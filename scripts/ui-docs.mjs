@@ -205,3 +205,25 @@ const THUMB = {
   'toast': '<span class="t-toast"><i></i>Your changes are live.</span>',
   'tooltip': '<span class="t-tip">Copy link</span>'
 };
+const thumb = u => u.section === 'Scenes' ? u.demo.replace('height="460px"', 'height="100%" pixel="3"')
+  : u.section === 'Layouts' ? `<div class="scaled">${u.demo}</div>`
+  : u.section === 'Backgrounds' ? u.demo.replace('height="420px"', 'height="100%"')
+  : u.section === 'Text' && u.tag === 'piix-text' ? u.demo.replace('ex-h1', 'ex-h3')
+  : THUMB[u.slug] || u.demo;
+const lightThumb = u => u.stage && u.stage.light && u.section !== 'Layouts';
+const indexBody = `${head([], 'Pixel UI', `A component library drawn on the GPU. Backgrounds, heroes, buttons, cards, text effects and form controls, all rendered on a pixel grid and dithered into a palette. ${UI.length} components, each one a plain web component: one script tag, then copy a tag.`,
+  `<div class="pills">${bySection.map(([s, l]) => `<a class="pill" href="#${slug(s)}">${s} · ${l.length}</a>`).join('')}</div>`)}
+<div class="ui-why">
+  <div><h3>On the GPU</h3><p>Shaders run on one shared WebGL context, drawn at pixel resolution and scaled up crisp.</p></div>
+  <div><h3>Real elements</h3><p>Buttons are buttons, inputs submit with forms, tabs are tabs. Keyboard and screen readers just work.</p></div>
+  <div><h3>Polite</h3><p>Only what's on screen draws, finished effects rest the GPU, and reduced motion is respected everywhere.</p></div>
+</div>
+${bySection.map(([sec, list]) => `
+<h2 class="fam-h" id="${slug(sec)}">${sec} <span class="n">${list.length}</span></h2>
+<div class="ui-grid">
+${list.map(u => `  <a class="ui-card" href="${u.slug}.html">
+    <div class="ui-thumb${lightThumb(u) ? ' light' : ''}" aria-hidden="true" inert>${thumb(u)}</div>
+    <h3>${esc(u.name)}</h3><p>${u.brief}</p>
+  </a>`).join('\n')}
+</div>`).join('\n')}`;
+
