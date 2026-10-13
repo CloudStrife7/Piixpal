@@ -36,3 +36,5 @@ kbd{display:inline-block;min-width:1.1em;padding:${pad};text-align:center;font:4
 </style><kbd part="key"><slot></slot></kbd>`;
   }
 }
+define('piix-kbd', PiixKbdElement);
+ELEMENTS.kbd = 'piix-kbd';
