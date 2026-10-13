@@ -104,3 +104,5 @@ dialog[open]{animation:piixpop .22s steps(3)}
   _shader() { return GL_LOOKS[glLook(this)][1]; }
   _uniforms() { return { u_k: [this._click[0], this._click[1], (now() - this._click[2]) / 1000, 1], u_j: [.03, 0, 0, 0] }; }
 }
+define('piix-dialog', PiixDialogElement);
+ELEMENTS.dialog = 'piix-dialog';
