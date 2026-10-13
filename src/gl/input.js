@@ -58,3 +58,5 @@ input::placeholder{color:#8e869c}
     return { u_hover: Math.max(this._hov * .5, this._focus), u_mouse: this._focused ? [this._click[0], .5] : this._m, u_k: [this._click[0], this._click[1], (now() - this._click[2]) / 1000, 1], u_j: [this._focus * .03, 0, 0, 0] };
   }
 }
+define('piix-input', PiixInputElement);
+ELEMENTS.input = 'piix-input';
