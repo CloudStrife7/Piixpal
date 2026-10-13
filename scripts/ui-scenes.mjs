@@ -24,3 +24,30 @@ const SCENES = [
   ['vista', 'vista', 'Anime vista', 'A summer sky with towering clouds, a snowy peak and grass in the breeze.',
     'Big sunlit cumulus clouds with warm undersides, a snowy peak in the haze, and long grass waving in the foreground. Everything slides a little with the pointer.']
 ];
+const scenePage = ([kind, slug, name, brief, about]) => ({
+  slug, name, section: 'Scenes', tag: 'piix-scene', file: 'scene', brief, about,
+  demo: `<piix-scene kind="${kind}" height="460px"></piix-scene>`,
+  stage: { h: 460, pad: 0 },
+  controls: [['palette', 'Colours', 'palette', ''], ['sky', 'Sky', 'seg', ['', 'none'], ''], ['fade', 'Fade', 'seg', ['', 'top', 'bottom', 'both'], ''], ['levels', 'Levels', 'range', [2, 12, 1, 6]], ['pixel', 'Pixel', 'range', [2, 10, 1, 4]]],
+  examples: [
+    { name: 'As a hero', note: 'Give <a href="hero.html">Hero</a> a <code>scene</code> and your content sits on top of it.',
+      demo: `<piix-hero scene="${kind}" height="440px">\n  <p class="eyebrow">Now open</p>\n  <h1>Somewhere new</h1>\n  <p>A whole place, drawn in pixels, behind your words.</p>\n  <piix-glow-button>Explore</piix-glow-button>\n</piix-hero>`, stage: { pad: 0, replay: true } },
+    { name: 'On a normal page', note: '<code>sky="none"</code> cuts the sky out, so your page shows through. Add <code>fade</code> to dissolve an edge.',
+      demo: `<piix-scene kind="${kind}" sky="none" height="280px"></piix-scene>`, stage: { pad: 0, light: true } },
+    { name: 'Repainted', note: 'Give it a <code>palette</code> and the whole scene is redrawn in those colours.',
+      demo: `<div class="ex-row">\n  <piix-scene kind="${kind}" palette="gameboy" height="180px"></piix-scene>\n  <piix-scene kind="${kind}" palette="sunset" height="180px"></piix-scene>\n  <piix-scene kind="${kind}" palette="paper" height="180px"></piix-scene>\n</div>`, stage: { pad: 0 } },
+    { name: 'Fewer colours', note: '<code>levels</code> sets how many shades each colour channel gets. 2 or 3 is very retro.',
+      demo: `<piix-scene kind="${kind}" levels="3" pixel="5" height="240px"></piix-scene>`, stage: { pad: 0 } }
+  ],
+  props: [
+    ['kind', '<code>sakura</code> <code>alps</code> <code>lake</code> <code>galaxy</code> <code>rays</code> <code>vortex</code> <code>train</code> <code>poppies</code> <code>castle</code> <code>vista</code>', 'sakura'],
+    ['sky', '<code>none</code> makes the sky see-through', ''],
+    ['fade', '<code>top</code> <code>bottom</code> <code>both</code>: dissolve that edge in dithered pixels', ''],
+    ['palette', 'repaint it in a palette instead of its own colours', ''],
+    ['levels', 'shades per colour channel, 2 to 16', '6'],
+    PX_PROP(4), ['dither', '0 for flat colour, 1 for full dither', '1'], ['speed', '1 is normal, 0 holds still', '1'],
+    ['height', 'when not filling: px or any CSS length', '480px'], ['fill', 'sit behind the content of the parent element', '']
+  ],
+  a11y: ["Announced as an image with a description of the scene, unless it fills a parent (then it's decoration).", 'With reduced motion it renders one still frame.', 'Drawn entirely in a shader: no images to download, and it compiles in the background so the page never stalls.']
+});
+
