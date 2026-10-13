@@ -331,3 +331,33 @@ vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
   return vec4(c,sky);}`]
 };
 
+/* the shared noise: 256 x 256 random values, made once per page */
+const SC_NOISE = { owner: {}, src: null, repeat: true };
+const scNoise = () => {
+  if (!SC_NOISE.src) {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const g = c.getContext('2d'), d = g.createImageData(256, 256);
+    for (let i = 0; i < d.data.length; i += 4) { d.data[i] = Math.random() * 256; d.data[i + 1] = Math.random() * 256; d.data[i + 2] = Math.random() * 256; d.data[i + 3] = 255; }
+    g.putImageData(d, 0, 0); SC_NOISE.src = c;
+  }
+  return SC_NOISE;
+};
+/* scenes call fbm() and noise(); point them at the texture versions */
+const scBody = k => (SC_HEAD + SC_KINDS[k][1]).replace(/\bfbm\(/g, 'tfbm(').replace(/\bnoise\(/g, 'tnoise(') + SC_TAIL;
+
+class PiixSceneElement extends GLStage {
+  static get observedAttributes() { return [...GLStage.observedAttributes, 'sky', 'fade', 'levels']; }
+  constructor() { super(); this._defPx = 4; this._defPal = 'mono'; this._introLen = 1; }
+  get kind() { const k = this.getAttribute('kind'); return k === 'porthole' ? 'train' : SC_KINDS[k] ? k : 'sakura'; }
+  _hostCss() { return (this.hasAttribute('fill') ? '' : 'width:100%;') + (this.hasAttribute('fill') || this.getAttribute('height') ? '' : 'height:480px;'); }
+  _setup() {
+    if (this.hasAttribute('fill')) this.setAttribute('aria-hidden', 'true');
+    else if (!this.hasAttribute('aria-label')) { this.setAttribute('role', 'img'); this.setAttribute('aria-label', SC_KINDS[this.kind][0]); }
+  }
+  _shader() { return scBody(this.kind); }
+  _texture() { return scNoise(); }
+  _uniforms() {
+    const fade = { top: 1, bottom: 2, both: 3 }[this.getAttribute('fade')] || 0;
+    return { u_j: [this.hasAttribute('palette') ? 1 : 0, clamp(+this.getAttribute('levels') || 6, 2, 16), 0, 0], u_k: [this.getAttribute('sky') === 'none' ? 1 : 0, fade, 0, .32] };
+  }
+}
