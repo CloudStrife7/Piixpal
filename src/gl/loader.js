@@ -22,3 +22,13 @@ const LD_SHADER = `vec4 effect(vec2 uv,vec2 cell){
   else if(k==3.){float b=floor(uv.x*5.),f=fract(uv.x*5.),h=.2+.7*(.5+.5*sin(t*6.+b*1.2));v=(f>.18&&f<.82&&abs(uv.y-.5)*2.<h)?.35+.65*h:0.;}
   else{float w=fract(r*1.3-t*.9);v=r<1.?smoothstep(.2,0.,abs(w-.5)-.12)*(1.-r*.8):0.;}
   if(v<.03)return vec4(0.);return vec4(dpal(.3+.7*v,cell),1.);}`;
+class PiixLoaderElement extends GLStage {
+  static get observedAttributes() { return [...GLStage.observedAttributes, 'size', 'label']; }
+  constructor() { super(); this._defPx = 3; this._defPal = 'lime'; this._defDither = 0; }
+  _hostCss() { const s = +this.getAttribute('size') || 48; return `display:inline-block;vertical-align:middle;width:${s}px;height:${s}px`; }
+  _setup() { this.setAttribute('role', 'status'); this.setAttribute('aria-label', this.getAttribute('label') || 'Loading'); }
+  _shader() { return LD_SHADER; }
+  _uniforms() { return { u_k: [LD_KINDS[this.getAttribute('kind')] || 0, 0, 0, 0] }; }
+}
+define('piix-loader', PiixLoaderElement);
+ELEMENTS.loader = 'piix-loader';
