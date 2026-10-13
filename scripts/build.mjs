@@ -21,7 +21,7 @@ const read = f => `/* ---- ${f.split(sep).join('/')} ---- */\n` + readFileSync(j
 
 /* listed on every call, so a long-running dev server picks up new files */
 const CORE_LIST = () => ['core.js', 'icons.js', 'ui.js', 'text.js', 'drag.js', ...dir('elements'), 'boot.js'].filter(f => existsSync(join(src, f)));
-const COMPONENT_LIST = () => [...dir('behaviors'), ...dir('pals'), ...dir('sprites'), ...dir('powers'), ...dir('studio')];
+const COMPONENT_LIST = () => [...dir('behaviors'), ...dir('pals'), ...dir('sprites'), ...dir('powers'), ...dir('studio'), ...dir('kit'), ...dir('gl')];
 
 /* everything the core declares at the top level becomes part of the shared toolkit */
 const coreNames = () => {
