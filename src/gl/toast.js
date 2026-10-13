@@ -87,3 +87,10 @@ li:hover .fuse i,li:focus-within .fuse i,li:hover .fuse i::after,li:focus-within
     return { close };
   }
 }
+define('piix-toaster', PiixToasterElement);
+Piixpal.toast = (message, o) => {
+  let t = document.querySelector('piix-toaster');
+  if (!t) { t = document.createElement('piix-toaster'); document.body.appendChild(t); }
+  return t.push(message, o);
+};
+ELEMENTS.toast = 'piix-toaster';
