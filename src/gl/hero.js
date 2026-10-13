@@ -48,3 +48,5 @@ class PiixHeroElement extends HTMLElement {
     sh._introLen = 1.2;
   }
 }
+define('piix-hero', PiixHeroElement);
+ELEMENTS.hero = 'piix-hero';
