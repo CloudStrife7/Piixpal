@@ -79,3 +79,5 @@ class PiixTooltipElement extends HTMLElement {
   }
   hide() { clearInterval(this._ty); this._wrap.classList.remove('on'); }
 }
+define('piix-tooltip', PiixTooltipElement);
+ELEMENTS.tooltip = 'piix-tooltip';
