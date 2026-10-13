@@ -11911,6 +11911,7 @@ ELEMENTS.divider = 'piix-divider';
  *   text      what it says (letters, digits, spaces and : . - / ! ? ' & +)
  *   length    pad it to this many tiles
  *   countdown a date and time to count down to
+ *   stagger   ms between one tile starting and the next         default: 70
  *   theme     dark | light | amber                          default: dark */
 const FLAP_SET = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:.-/!?'&+";
 const FLAP_THEMES = { dark: ['#17121f', '#211a2c', '#f4efe2', '#000'], light: ['#f4efe2', '#e7e0d0', '#17121f', '#b8ae9a'], amber: ['#1a1208', '#24190a', '#ffb43a', '#000'] };
@@ -11973,7 +11974,8 @@ class PiixFlapElement extends HTMLElement {
       this._cur = this._tiles.map(() => ' ');
     }
     (this._timers || []).forEach(clearTimeout); this._timers = [];
-    [...chars].forEach((ch, i) => this._flipTo(i, ch, cd ? 0 : i * 70));
+    const gap = this.hasAttribute('stagger') ? +this.getAttribute('stagger') : 70;
+    [...chars].forEach((ch, i) => this._flipTo(i, ch, cd ? 0 : i * gap));
     clearInterval(this._cd);
     if (cd) this._cd = setInterval(() => this._run(), 1000);
   }
