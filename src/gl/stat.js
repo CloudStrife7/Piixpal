@@ -52,3 +52,5 @@ class PiixStatElement extends HTMLElement {
     if (k >= 1) unsub(this._tick);
   }
 }
+define('piix-stat', PiixStatElement);
+ELEMENTS.stat = 'piix-stat';
