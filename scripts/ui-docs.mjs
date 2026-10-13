@@ -182,3 +182,26 @@ ${pager(u.slug)}`;
   return shell({ key: u.slug, title: u.name, desc: u.brief, body, toc });
 };
 
+/* ---------- overview ---------- */
+/* small live previews for the overview grid */
+const THUMB = {
+  'hero': '<piix-shader kind="horizon" height="100%" pixel="4"></piix-shader><b class="t-over">Build something loud</b>',
+  'divider': '<piix-divider kind="wave" from="#17121f" to="#f3eee3" height="100%"></piix-divider>',
+  'marquee': '<piix-marquee speed="30" gap="28" fade="48"><span class="logo s">◆ Acme</span><span class="logo s">▲ Globex</span><span class="logo s">● Initech</span><span class="logo s">■ Umbrella</span></piix-marquee>',
+  'glow-card': '<piix-glow-card style="width:72%"><h3>Realtime</h3><p>Live everywhere.</p></piix-glow-card>',
+  'counter': '<piix-stat value="12480" suffix="+" style="--s:.6">teams</piix-stat>',
+  'pixel-image': '<piix-pixel-image src="../site/launch-poster.jpg" alt="" height="100%" palette="gameboy"></piix-pixel-image>',
+  'input': '<piix-input placeholder="you@site.com" style="width:80%">Email</piix-input>',
+  'tabs': '<piix-tabs style="width:90%"><div label="One"></div><div label="Two"></div><div label="Three"></div></piix-tabs>',
+  'loader': '<piix-loader size="56"></piix-loader><piix-loader kind="snake" palette="sunset" size="56"></piix-loader>',
+  'progress': '<piix-progress value="60" style="width:80%"></piix-progress>',
+  'reveal': '<piix-reveal pattern="rain" style="width:70%"><div class="shot s">Reveal</div></piix-reveal>',
+  'cursor': '<span class="t-cur">Move your pointer</span>',
+  'chart': '<piix-chart values="12,18,14,24,30,26,38,34,42,48,44,56" height="110px" style="width:86%"></piix-chart>',
+  'flap-board': '<piix-flap text="BOARDING" style="font-size:22px"></piix-flap>',
+  'slider': '<piix-slider value="62" style="width:80%">Volume</piix-slider>',
+  'keycap': '<span><piix-kbd>⌘</piix-kbd> <piix-kbd>K</piix-kbd></span>',
+  'dialog': '<piix-glow-card style="width:72%"><h3 style="margin:0;font-size:17px">Deploy to production?</h3></piix-glow-card>',
+  'toast': '<span class="t-toast"><i></i>Your changes are live.</span>',
+  'tooltip': '<span class="t-tip">Copy link</span>'
+};
