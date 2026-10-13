@@ -1,0 +1,236 @@
+<!doctype html>
+<!-- Pixel UI launch film. A 1920x1080 stage built from the real Pixel UI components, cut to video/beat.mjs.
+     Rendered frame by frame by: PAGE=ui-launch.html node video/render.mjs. Open it in a browser to watch live (?t=12). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pixel UI: launch film</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@400;600&family=Silkscreen&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<script>
+/* a clock the renderer owns: time, animation frames and timers only move when it is told to */
+(() => {
+  let now = 0, seed = 11, tid = 1;
+  window.__realNow = performance.now.bind(performance);
+  window.__realSetInterval = setInterval.bind(window);
+  window.__realClearInterval = clearInterval.bind(window);
+  const queue = [], timers = new Map();
+  performance.now = () => now;
+  Date.now = () => 1790000000000 + now;
+  window.requestAnimationFrame = cb => queue.push(cb);
+  window.cancelAnimationFrame = () => {};
+  window.setTimeout = (fn, ms = 0, ...a) => { const id = tid++; timers.set(id, { at: now + Math.max(0, +ms || 0), fn, a }); return id; };
+  window.setInterval = (fn, ms = 0, ...a) => { const id = tid++; timers.set(id, { at: now + Math.max(1, +ms || 0), fn, a, every: Math.max(1, +ms || 0) }); return id; };
+  window.clearTimeout = window.clearInterval = id => timers.delete(id);
+  Math.random = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  window.__clock = {
+    get ms() { return now; },
+    step(dt) {
+      const end = now + Math.max(0, dt);
+      for (let guard = 0; guard < 5000; guard++) {
+        let best = null, bid = 0;
+        for (const [id, t] of timers) if (t.at <= end && (!best || t.at < best.at)) { best = t; bid = id; }
+        if (!best) break;
+        now = Math.max(now, best.at);
+        if (best.every) best.at += best.every; else timers.delete(bid);
+        try { typeof best.fn === 'function' && best.fn(...best.a); } catch (e) { console.error(e); }
+      }
+      now = end;
+      queue.splice(0).forEach(cb => { try { cb(now); } catch (e) { console.error(e); } });
+    }
+  };
+})();
+</script>
+<style>
+  html, body { margin: 0; background: #000; overflow: hidden }
+  #stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #08070d; font-family: "Bricolage Grotesque", system-ui, sans-serif; color: #f2eef8 }
+  .shot { position: absolute; inset: 0; visibility: hidden; overflow: hidden }
+  .shot.on { visibility: visible }
+  .cam { position: absolute; inset: 0; transform-origin: 50% 50% }
+  .bg { position: absolute; inset: 0 }
+  .pix { font-family: Silkscreen, monospace; text-transform: uppercase; letter-spacing: .08em }
+  .mono { font-family: "JetBrains Mono", monospace }
+  /* overlays */
+  #fx { position: absolute; inset: 0; z-index: 50; pointer-events: none }
+  #grain { position: absolute; inset: 0; z-index: 49; pointer-events: none; opacity: .07; background-image: repeating-linear-gradient(0deg, #000 0 2px, transparent 2px 4px) }
+  #vig { position: absolute; inset: 0; z-index: 48; pointer-events: none; background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0,0,0,.45) 100%) }
+
+  /* intro */
+  #s-intro .dot { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px; background: #c6f432; box-shadow: 0 0 40px #c6f43288 }
+  #s-intro .center { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 30px }
+  #s-intro .kicker { font-size: 26px; color: #c6f432; height: 30px }
+  #s-intro piix-flap { font-size: 150px }
+
+  /* scene shots */
+  .sc .word { position: absolute; left: 96px; bottom: 120px; font-size: 200px; font-weight: 800; letter-spacing: -.055em; line-height: .86; color: #fff; text-shadow: 8px 8px 0 rgba(0,0,0,.45) }
+  .sc .tag { position: absolute; left: 104px; bottom: 74px; padding: 10px 16px; font-size: 26px; background: rgba(8,7,13,.82); color: #c6f432 }
+  .sc .count { position: absolute; right: 96px; top: 80px; font-size: 30px; color: #fff; text-shadow: 3px 3px 0 #000 }
+  .sc .label { position: absolute; left: 104px; top: 80px; font-size: 24px; color: #fff; text-shadow: 3px 3px 0 #000; opacity: .9 }
+
+  /* looks */
+  #s-looks .center { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 720px; align-items: center; gap: 40px; padding: 0 140px }
+  #s-looks .lhs { font-size: 120px; font-weight: 800; letter-spacing: -.05em; line-height: .9; text-shadow: 6px 6px 0 rgba(0,0,0,.4) }
+  #s-looks .lhs small { display: block; margin-top: 26px; font-size: 40px; color: #c6f432; letter-spacing: 0; text-shadow: 3px 3px 0 #000 }
+  #s-looks .stack { display: grid; gap: 22px; justify-items: start; transform: scale(1.45); transform-origin: 0 50% }
+  #s-looks piix-glow-card { width: 470px }
+  #s-looks piix-glow-card h3 { font-size: 46px !important; margin: 0 0 10px !important }
+  #s-looks piix-glow-card p { font-size: 26px }
+  #s-looks piix-input { width: 470px }
+
+  /* departures */
+  #s-board { background: #0b0a10 }
+  #s-board .wrap { position: absolute; inset: 90px 120px; display: grid; align-content: start; gap: 26px }
+  #s-board h2 { margin: 0 0 20px; font-size: 40px; color: #ffcc55; display: flex; justify-content: space-between }
+  #s-board piix-flap { font-size: 76px }
+  #s-board .cd { position: absolute; right: 120px; bottom: 80px; text-align: right }
+  #s-board .cd piix-flap { font-size: 60px }
+  #s-board .cd p { margin: 0 0 14px; font-size: 22px; color: #ffcc55 }
+
+  /* dashboard */
+  #s-dash { background: #0d0c14 }
+  #s-dash .grid { position: absolute; inset: 80px 100px; display: grid; grid-template-columns: 1.6fr 1fr; grid-template-rows: auto 1fr 1fr; gap: 24px }
+  #s-dash .stats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px }
+  #s-dash .panel { background: #15121e; box-shadow: inset 0 0 0 2px #262035; padding: 28px 30px; display: grid; grid-template-rows: auto 1fr; gap: 14px }
+  #s-dash .panel h4 { margin: 0; font-size: 18px; opacity: .6 }
+  #s-dash .big { grid-row: 2 / 4 }
+  #s-dash piix-stat { font-size: 20px }
+
+  /* dialog */
+  #s-dialog .mock { position: absolute; left: 0; right: 0; top: 0; height: 90px; display: flex; align-items: center; justify-content: space-between; padding: 0 70px; background: rgba(8,7,13,.35); font-size: 28px; font-weight: 800 }
+  #s-dialog .mock span { font-size: 20px; font-weight: 500; opacity: .85; display: flex; gap: 40px }
+  #s-dialog .hero { position: absolute; left: 110px; bottom: 150px; font-size: 130px; font-weight: 800; letter-spacing: -.05em; line-height: .9; text-shadow: 6px 6px 0 rgba(0,0,0,.35) }
+
+  /* keys */
+  #s-keys { background: #f3eee3; color: #17121f }
+  #s-keys .k { position: absolute; left: 50%; top: 330px; transform: translateX(-50%) scale(5); transform-origin: 50% 50%; display: flex; gap: 6px; white-space: nowrap }
+  #s-keys .cap { position: absolute; left: 0; right: 0; top: 150px; text-align: center; font-size: 30px; opacity: .55 }
+  #s-keys .sl { position: absolute; left: 50%; bottom: 150px; width: 1100px; transform: translateX(-50%) }
+  #s-keys .sl piix-slider { transform: scale(1.6); transform-origin: 50% 100% }
+
+  /* quick cuts */
+  #q-glitch { background: #08070d }
+  #q-glitch .c { position: absolute; inset: 0; display: grid; place-content: center; font-size: 210px; font-weight: 800; letter-spacing: -.05em }
+  #q-glass .c, #q-riso .c, #q-crt .c { position: absolute; inset: 0; display: flex; gap: 40px; align-items: center; justify-content: center }
+  #q-riso { background: #eadcc4 }
+  #q-riso h1 { position: absolute; left: 120px; top: 110px; margin: 0; font: italic 400 150px/1 "Instrument Serif", serif; color: #1c38d4 }
+  #q-crt { background: #020805 }
+  .q-card { width: 460px }
+  #q-glass .c, #q-riso .c, #q-crt .c { transform: scale(1.5) }
+  piix-dialog::part(dialog) { zoom: 1.7 }
+  .q-card h3 { font-size: 42px !important }
+  .q-card p { font-size: 24px }
+
+  /* grid */
+  #s-grid { background: #08070d }
+  #s-grid .mos { position: absolute; left: 50%; top: 50%; width: 2700px; height: 1520px; margin: -760px -1350px; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 18px }
+  #s-grid .tile { position: relative; overflow: hidden; background: #15121e; box-shadow: inset 0 0 0 3px #262035; display: grid; place-items: center }
+  #s-grid .tile piix-flap { font-size: 64px }
+
+  /* outro */
+  #s-outro .center { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 26px; text-align: center }
+  #s-outro img { width: 150px; height: 150px; image-rendering: pixelated }
+  #s-outro h1 { margin: 0; font-size: 190px; font-weight: 800; letter-spacing: -.055em; line-height: .9 }
+  #s-outro .sub { font-size: 26px; opacity: .8 }
+  #s-outro .url { padding: 16px 26px; font-size: 34px; background: #c6f432; color: #17121f }
+</style>
+</head>
+<body>
+<div id="stage">
+
+  <section class="shot" id="s-intro"><div class="cam">
+    <piix-shader kind="dots" palette="lime" fill pixel="6" class="bg" id="intro-bg"></piix-shader>
+    <div class="dot"></div>
+    <div class="center"><div class="kicker pix" id="kicker"></div><piix-flap id="ftitle" length="10"></piix-flap></div>
+  </div></section>
+
+  <section class="shot sc" data-kind="sakura"></section>
+  <section class="shot sc" data-kind="castle"></section>
+  <section class="shot sc" data-kind="galaxy"></section>
+  <section class="shot sc" data-kind="rays"></section>
+  <section class="shot sc" data-kind="train"></section>
+  <section class="shot sc" data-kind="poppies"></section>
+  <section class="shot sc" data-kind="alps"></section>
+  <section class="shot sc" data-kind="vista"></section>
+
+  <section class="shot" id="s-looks"><div class="cam">
+    <div class="bg"><piix-scene kind="sakura" fill pixel="5"></piix-scene></div>
+    <div class="center">
+      <div class="lhs">One tag.<br>Five looks.<small class="mono" id="lookname">look="glow"</small></div>
+      <div class="stack">
+        <piix-glow-card id="lk-card"><h3>Realtime</h3><p>Every change, live on every device.</p></piix-glow-card>
+        <piix-input id="lk-input" placeholder="you@studio.com">Email</piix-input>
+        <piix-glow-button id="lk-btn" size="lg">Get started</piix-glow-button>
+      </div>
+    </div>
+  </div></section>
+
+  <section class="shot" id="s-board"><div class="cam"><div class="wrap">
+    <h2 class="pix"><span>Departures</span><span>Pixel UI</span></h2>
+    <piix-flap class="row" length="22" data-text="SCENES    10 ON TIME"></piix-flap>
+    <piix-flap class="row" length="22" data-text="LOOKS      5 BOARDING"></piix-flap>
+    <piix-flap class="row" length="22" data-text="OVERLAYS   3 NOW"></piix-flap>
+    <piix-flap class="row" length="22" data-text="CHARTS   LIVE GATE 7"></piix-flap>
+    <piix-flap class="row" length="22" data-text="COMPONENTS 55 READY"></piix-flap>
+  </div>
+  <div class="cd"><p class="pix">Next drop in</p><piix-flap countdown="2026-09-26T09:00:00" theme="amber"></piix-flap></div>
+  </div></section>
+
+  <section class="shot" id="s-dash"><div class="cam"><div class="grid">
+    <div class="stats">
+      <div class="panel"><h4 class="pix">Visitors</h4><piix-stat value="48210" suffix="+"></piix-stat></div>
+      <div class="panel"><h4 class="pix">Uptime</h4><piix-stat value="99.98" decimals="2" suffix="%" tone="sky"></piix-stat></div>
+      <div class="panel"><h4 class="pix">Revenue</h4><piix-stat value="2.4" decimals="1" prefix="$" suffix="M" tone="coral"></piix-stat></div>
+    </div>
+    <div class="panel big"><h4 class="pix">Traffic</h4><piix-chart values="12,18,14,24,30,26,38,34,42,48,44,56,61,58,72" height="100%"></piix-chart></div>
+    <div class="panel"><h4 class="pix">Signups</h4><piix-chart kind="bars" values="4,7,5,9,12,8,14" palette="sunset" height="100%"></piix-chart></div>
+    <div class="panel"><h4 class="pix">Latency</h4><piix-chart kind="line" values="40,38,42,30,28,31,22,20,24,18,16" palette="ocean" height="100%"></piix-chart></div>
+  </div></div></section>
+
+  <section class="shot" id="s-dialog"><div class="cam">
+    <div class="bg"><piix-scene kind="vista" fill pixel="5"></piix-scene></div>
+    <div class="mock">Studio<span><b>Projects</b><b>Deploys</b><b>Settings</b></span></div>
+    <div class="hero">Ship it.</div>
+  </div></section>
+  <piix-dialog id="dlg" width="540px"><h2>Deploy to production?</h2><p>14 changes, 3 new scenes, zero regrets.</p><piix-glow-button size="lg" id="dlg-go">Deploy now</piix-glow-button></piix-dialog>
+
+  <section class="shot" id="s-keys"><div class="cam">
+    <div class="cap pix">Press it on your keyboard</div>
+    <div class="k"><piix-kbd id="k1" size="lg">⌘</piix-kbd><piix-kbd id="k2" size="lg">K</piix-kbd><piix-kbd id="k3" size="lg" theme="lime">↵</piix-kbd></div>
+    <div class="sl"><piix-slider id="sl" value="20" suffix="%" palette="candy">Volume</piix-slider></div>
+  </div></section>
+
+  <section class="shot" id="q-glitch"><div class="cam"><div class="c"><piix-text effect="glitch" palette="candy" pixel="4">PIXEL PERFECT</piix-text></div></div></section>
+  <section class="shot" id="q-glass"><div class="cam"><div class="bg"><piix-scene kind="lake" fill pixel="5"></piix-scene></div><div class="c">
+    <piix-glow-card look="glass" class="q-card"><h3>Frosted</h3><p>The scene blurs right through it.</p></piix-glow-card><piix-glow-button look="glass" size="lg">Explore</piix-glow-button></div></div></section>
+  <section class="shot" id="q-riso"><div class="cam"><h1>Printed in two inks</h1><div class="c" style="padding-top:160px">
+    <piix-glow-card look="riso" class="q-card"><h3>Issue 07</h3><p>Night roads, after midnight.</p></piix-glow-card><piix-glow-button look="riso" size="lg">Subscribe</piix-glow-button></div></div></section>
+  <section class="shot" id="q-crt"><div class="cam"><div class="c">
+    <piix-glow-card look="crt" class="q-card"><h3>$ deploy --prod</h3><p>build 2.1s · 55 components · ok</p></piix-glow-card><piix-glow-button look="crt" size="lg">run</piix-glow-button></div></div></section>
+
+  <section class="shot" id="s-grid"><div class="cam"><div class="mos">
+    <div class="tile"><piix-scene kind="castle" fill pixel="4"></piix-scene></div>
+    <div class="tile"><piix-chart values="3,5,4,8,7,11,10,14" style="width:80%" height="60%"></piix-chart></div>
+    <div class="tile"><piix-scene kind="sakura" fill pixel="4"></piix-scene></div>
+    <div class="tile"><piix-glow-card look="chrome" style="width:70%"><h3>Chrome</h3><p>Liquid metal.</p></piix-glow-card></div>
+    <div class="tile"><piix-flap text="PIXEL UI" theme="amber"></piix-flap></div>
+    <div class="tile"><piix-scene kind="galaxy" fill pixel="4"></piix-scene></div>
+    <div class="tile"><piix-scene kind="rays" fill pixel="4"></piix-scene></div>
+    <div class="tile"><piix-loader kind="snake" size="160" palette="sunset"></piix-loader></div>
+    <div class="tile"><piix-scene kind="train" fill pixel="4"></piix-scene></div>
+  </div></div></section>
+
+  <section class="shot" id="s-outro"><div class="cam">
+    <div class="bg" style="opacity:.35"><piix-scene kind="galaxy" fill pixel="5"></piix-scene></div>
+    <div class="center">
+      <img src="../site/logo.svg" alt="">
+      <h1><piix-text effect="shine" palette="lime" pixel="4">Pixel UI</piix-text></h1>
+      <div class="sub pix">Scenes · Looks · 55 components · Free &amp; open source</div>
+      <div class="url pix">piixpal.dvkk.dev/ui</div>
+    </div>
+  </div></section>
+
+  <div id="vig"></div><div id="grain"></div><canvas id="fx" width="1920" height="1080"></canvas>
+</div>
+<script src="../piixpal.js"></script>
+<script src="ui-film.js"></script>
+</body>
+</html>
