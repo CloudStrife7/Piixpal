@@ -61,3 +61,273 @@ vec4 effect(vec2 uv,vec2 cell){
   if(f<b)a=0.;
   return vec4(c,a);}`;
 
+const SC_KINDS = {
+  sakura: ['A cherry tree in bloom over a misty forest, with a lantern, a bench and falling petals', `
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,w=W(),xl=-w*.5,y=uv.y,sky=1.;
+  float fog=fbm(p*vec2(2.,3.)+vec2(t*.015,0.));
+  vec3 c=mix(rgb(20.,70.,62.),rgb(100.,176.,150.),clamp(y*.45+fog*.65-.05,0.,1.));
+  float fx=p.x*6.+m.x*.5,fid=floor(fx);
+  c=mix(c,rgb(26.,80.,70.),step(abs(fract(fx)-.5),.05+.06*h2(vec2(fid,3.)))*.5*smoothstep(.95,.3,y));
+  c+=rgb(120.,210.,170.)*.4*exp(-length((p-vec2(w*.08,.36))*vec2(1.,1.8))*2.2);
+  float gy=.2+.015*sin(p.x*4.);
+  if(y<gy){sky=0.;c=mix(rgb(36.,66.,38.),rgb(100.,146.,72.),fbm(vec2(p.x*14.,y*60.)));
+    c=mix(c,rgb(214.,122.,152.),step(.6,fbm(vec2(p.x*22.,y*70.)+7.))*.85);c*=.7+.3*smoothstep(0.,gy,y);}
+  float lx=xl+w*.38,ly=.47;
+  float glow=exp(-length((p-vec2(lx,ly))*vec2(1.,1.2))*7.)*(.85+.15*sin(t*7.)*sin(t*3.1));
+  c+=rgb(255.,196.,110.)*glow*.6;
+  if(box(p,vec2(lx-.005,gy-.02),vec2(lx+.005,ly-.03))+tri(p,vec2(lx,ly+.022),.042,.035)>0.){c=rgb(30.,22.,24.);sky=0.;}
+  if(box(p,vec2(lx-.024,ly-.035),vec2(lx+.024,ly+.024))>0.){c=mix(rgb(255.,206.,110.),rgb(255.,246.,205.),step(abs(p.x-lx),.011));sky=0.;}
+  float bx=lx+.07,bw=.26;
+  float bench=box(p,vec2(bx,.255),vec2(bx+bw,.27))+box(p,vec2(bx,.285),vec2(bx+bw,.297))+box(p,vec2(bx,.307),vec2(bx+bw,.319))
+    +box(p,vec2(bx+.012,gy-.01),vec2(bx+.022,.255))+box(p,vec2(bx+bw-.022,gy-.01),vec2(bx+bw-.012,.255));
+  if(bench>0.){c=mix(rgb(66.,38.,28.),rgb(150.,92.,56.),.35+glow*2.);sky=0.;}
+  float tc=xl+w*.17+.05*sin(y*3.5+1.),tw=.06+.1*pow(1.-clamp(y,0.,1.),2.)+.05*smoothstep(.32,.18,y);
+  float trunk=step(abs(p.x-tc),tw)*step(y,.8);
+  float b1x=(p.x-tc)/(w*.6),b1=.6+.2*sin(clamp(b1x,0.,1.)*2.6)-b1x*.12;
+  float br=step(0.,b1x)*step(b1x,1.)*step(abs(y-b1),.034*(1.-b1x)+.008);
+  float b2x=(p.x-tc)/(w*.28),b2=.68+.12*sin(clamp(-b2x,0.,1.)*2.6);
+  br+=step(b2x,0.)*step(-1.,b2x)*step(abs(y-b2),.03*(1.+b2x)+.006);
+  if(trunk+br>0.){sky=0.;c=mix(rgb(24.,18.,20.),rgb(62.,46.,42.),fbm(vec2(p.x*30.,y*8.)));
+    c=mix(c,rgb(160.,150.,96.)*(.55+glow),smoothstep(tw*.25,tw,p.x-tc)*trunk*.65);}
+  vec2 cq=p*vec2(2.2,2.8)+vec2(t*.02+m.x*.15,0.);
+  float d=fbm(cq)+smoothstep(.45,1.,y)*.95-.55-smoothstep(.6,.36,y)*.5;
+  if(d>.14){sky=0.;float l=fbm(p*9.+3.)*.7+(y-.5)*.6+p.x/w*.25+.12*m.y;
+    c=l<.3?rgb(104.,28.,60.):l<.44?rgb(168.,50.,94.):l<.58?rgb(214.,98.,140.):rgb(248.,172.,198.);
+    c=mix(c,rgb(20.,62.,56.),.3*step(fbm(p*16.),.3));}
+  vec2 mp=u_mouse*u_res;
+  for(int i=0;i<3;i++){float fi=float(i),s=8.+fi*5.;
+    vec2 dm=cell-mp,push=dm/(length(dm)+.001)*exp(-length(dm)/(14.+fi*4.))*(6.+fi*3.)*u_hover;
+    vec2 q=(cell-push)/s;q.y+=t*(.7+fi*.3);q.x+=t*.06+sin(q.y*.35+t*.5+fi*2.)*.18;
+    vec2 id=floor(q),f=fract(q);float h=h2(id+fi*17.);
+    if(h>.78){vec2 o=vec2(h2(id+3.),h2(id+5.))*.6+.2,dd=abs(f-o)*s;
+      if(dd.x<1.+fi*.6&&dd.y<.7+fi*.4){c=mix(rgb(255.,186.,208.),rgb(255.,236.,242.),h2(id));sky=0.;}}}
+  return vec4(c,sky);}`],
+
+  alps: ['Snowy mountains behind layers of green hills, with pine trees and mist in the valleys', `
+float peaks(float x){return .44+.17*(1.-abs(sin(x*2.1+1.)))+.11*(1.-abs(sin(x*4.7+2.)))+.05*(1.-abs(sin(x*11.3)))+.03*ridged(vec2(x*9.,1.));}
+float hill(float x,float fi){return .5*sin(x*(1.3+fi*.35)+fi*2.1)+.3*sin(x*(2.9+fi*.5)+fi*4.7)+.2*sin(x*(5.3+fi)+fi);}
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,y=uv.y,sky=1.;
+  vec3 sk=mix(rgb(104.,124.,112.),rgb(66.,84.,76.),y),c=sk;
+  float x0=p.x+m.x*.02,f0=x0*1.4+3.;
+  float r0=peaks(x0),sl=peaks(x0+.006)-peaks(x0-.006);
+  if(y<r0){sky=0.;
+    c=mix(rgb(150.,164.,166.),rgb(250.,250.,244.),smoothstep(-.004,.004,-sl)*.85+.15*fbm(p*30.));
+    c=mix(c,rgb(214.,220.,214.),smoothstep(r0-.06,r0-.2,y));}
+  float cl=fbm(vec2(p.x*3.-t*.02,y*7.))+.45*smoothstep(.09,0.,abs(y-.44));
+  if(cl>.86&&y<.56&&y>.34){sky=0.;c=mix(rgb(226.,230.,224.),rgb(255.,255.,250.),smoothstep(.86,1.,cl));}
+  for(int i=0;i<4;i++){float fi=float(i),k=(fi+1.)/4.,x=p.x+m.x*.05*(fi+1.);
+    float h=.47-fi*.1+(.07+fi*.012)*hill(x,fi),dh=hill(x+.01,fi)-hill(x-.01,fi);
+    float tx=x*(34.+fi*12.),tid=floor(tx),th=h2(vec2(tid,fi));
+    float tree=step(.55,th)*step(.0,sin(x*2.3+fi*3.)-.2)*tri(vec2(fract(tx),y),vec2(.5,h-.008-th*.06*(1.-fi*.15)),.36,.016+fi*.012+.012*th);
+    if(y<h||tree>0.){sky=0.;
+      vec3 lit=mix(rgb(176.,198.,140.),rgb(136.,182.,76.),k),shade=mix(rgb(132.,156.,118.),rgb(70.,116.,48.),k);
+      c=mix(shade,lit,smoothstep(-.03,.03,dh))*(.92+.14*fbm(vec2(x*10.,y*24.)));
+      c=mix(c,mix(sk,vec3(.93),.45),smoothstep(.03,.2,h-y)*(.75-k*.5));
+      c=mix(c,sk,(1.-k)*.3);
+      if(tree>0.)c=mix(rgb(30.,62.,40.),mix(sk,vec3(.9),.3),(1.-k)*.55);}}
+  return vec4(c,sky);}`],
+
+  lake: ['A flat-colour sunset over a lake, with a little boat drifting across', `
+vec4 above(vec2 q,float sunY){
+  vec3 c=mix(rgb(236.,150.,108.),rgb(36.,118.,212.),smoothstep(.46,1.,q.y));float sky=1.;
+  c=mix(c,rgb(150.,132.,168.),.35*exp(-abs(q.y-.62)*8.));
+  if(length(q-vec2(0.,sunY))<.3){c=mix(rgb(242.,104.,52.),rgb(220.,192.,126.),smoothstep(sunY-.3,sunY+.3,q.y));sky=0.;}
+  float h1=.59+.07*sin(q.x*2.3+1.)+.035*sin(q.x*5.1+2.);
+  float h2_=.52+.08*sin(q.x*1.7+3.5)+.03*sin(q.x*4.+1.);
+  if(q.y<h1){c=mix(rgb(20.,96.,76.),rgb(36.,152.,116.),smoothstep(h1-.15,h1,q.y));sky=0.;}
+  if(q.y<h2_){c=mix(rgb(8.,46.,34.),rgb(22.,104.,74.),smoothstep(h2_-.12,h2_,q.y));sky=0.;}
+  return vec4(c,sky);}
+float boat(vec2 p,float bx,float by){
+  float k=(p.y-by)/.016;
+  return step(0.,k)*step(k,1.)*step(abs(p.x-bx),.05+.02*k)+box(p,vec2(bx-.004,by+.016),vec2(bx+.008,by+.036))
+    +step(length(p-vec2(bx+.002,by+.044)),.008)+step(abs((p.x-bx)-(p.y-by-.03)*.9),.0025)*box(p,vec2(bx-.03,by-.01),vec2(bx+.04,by+.06));}
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,H=.46,sunY=.56+(u_mouse.y-.5)*.34;vec2 q=p+vec2(m.x*.05,0.);
+  float bx=-.7+fract(t*.006)*1.4,by=H-.2;
+  if(uv.y>=H)return above(q,sunY);
+  float dep=H-uv.y,rip=sin(uv.y*900./(dep*30.+1.)+t*2.)*.006*(1.+dep*3.);
+  vec4 r=above(vec2(q.x+rip,2.*H-uv.y),sunY);
+  vec3 wat=mix(rgb(8.,70.,180.),rgb(10.,176.,214.),smoothstep(0.,.46,dep));
+  wat=mix(wat,rgb(120.,110.,140.),.25*exp(-dep*6.));
+  vec3 c=mix(wat,r.rgb,.6*exp(-dep*2.2)*(1.-r.a*.5));
+  float sp=step(.975,h2(vec2(floor(cell.x/4.+sin(cell.y*.7+t)*1.5),cell.y)))*exp(-abs(q.x)*5.)*exp(-dep*3.);
+  c=mix(c,rgb(255.,210.,150.),sp);
+  if(boat(q,bx,by)>0.)c=rgb(30.,22.,26.);
+  if(boat(vec2(q.x+rip*.5,2.*by-uv.y),bx,by)>0.)c=mix(c,rgb(30.,22.,26.),.45);
+  return vec4(c,0.);}`],
+
+  galaxy: ['A spiral galaxy with planets in orbit around its core', `
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,sky=1.,ang=-.42+m.x*.6,sq=.42+m.y*.35,ca=cos(ang),sa=sin(ang);
+  vec2 q=p-vec2(0.,.5),d=vec2(ca*q.x+sa*q.y,-sa*q.x+ca*q.y);d.y/=sq;
+  float r=length(d),a=atan(d.y,d.x);
+  vec3 c=rgb(8.,12.,26.)+rgb(70.,34.,100.)*smoothstep(.55,.9,fbm(p*2.+t*.01))*.6;
+  float st=h2(cell);if(st>.992)c+=vec3(.8)*(.55+.45*sin(t*2.+st*90.));
+  float arm=.5+.5*cos(2.*a+log(r+.001)*7.-t*.25),dust=fbm(vec2(a*3.+log(r+.001)*6.-t*.1,r*10.));
+  float lum=(arm*arm*smoothstep(1.25,.2,r)*(.55+.7*dust)+exp(-r*5.)*1.3)*(.8+.3*sin(r*48.+dust*6.));
+  vec3 dc=mix(rgb(70.,190.,190.),rgb(232.,170.,72.),smoothstep(.95,.35,r));
+  dc=mix(dc,rgb(255.,242.,205.),smoothstep(.28,0.,r));
+  c=mix(c,dc*min(lum,1.3),smoothstep(.06,.35,lum)*step(r,1.3));
+  if(lum>.3)sky=0.;
+  for(int i=0;i<6;i++){float fi=float(i),ri=.32+fi*.16,sp=.3/(1.+fi*.7),ph=fi*2.1;
+    vec2 pd=vec2(cos(t*sp+ph),sin(t*sp+ph))*ri;pd.y*=sq;
+    vec2 ps=vec2(0.,.5)+vec2(ca*pd.x-sa*pd.y,sa*pd.x+ca*pd.y);
+    float pr=.022+.022*h2(vec2(fi,4.)),dp=length(p-ps);
+    if(dp<pr){float band=sin((p.y-ps.y)/pr*6.+fi);
+      vec3 pc=mod(fi,3.)==1.?mix(rgb(60.,140.,170.),rgb(170.,222.,232.),.5+.5*band):mix(rgb(196.,116.,66.),rgb(242.,212.,160.),.5+.5*band);
+      vec3 n=vec3((p-ps)/pr,sqrt(max(1.-dp*dp/(pr*pr),0.)));
+      c=pc*(.3+.8*max(dot(n,normalize(vec3(vec2(0.,.5)-ps,.4))),0.));sky=0.;}
+    if(mod(fi,3.)==2.){float e=length((p-ps)*vec2(1.,2.8));
+      if(e>pr*1.35&&e<pr*2.1&&!(dp<pr&&p.y>ps.y)){c=mix(c,rgb(224.,204.,150.),.85);sky=0.;}}}
+  float sh=fract(t*.07);vec2 sc=vec2(-.8+sh*2.,.95-sh*.5);
+  float sd=length((p-sc)*mat2(.89,.45,-.45,.89)*vec2(.12,1.));
+  c+=vec3(1.)*smoothstep(.006,0.,sd)*step(sh,.35)*step(p.x,sc.x);
+  return vec4(c,sky);}`],
+
+  rays: ['A two-ink riso print of light rays bursting from the horizon under a crescent moon', `
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  vec3 ink=rgb(28.,56.,212.),pap=rgb(234.,222.,196.);
+  float t=u_time,H=.36,g=h2(cell),k,sky=1.;vec2 V=vec2(m.x*.5,H);
+  if(uv.y>H){vec2 d=p-V;float a=atan(d.x,d.y),dist=length(d);
+    float ray=noise(vec2(a*70.,.5))*.6+noise(vec2(a*23.,dist*2.-t*.2))*.55;
+    k=ray*smoothstep(1.15,0.,dist)*.95+.8*exp(-dist*6.)+(g-.5)*.4;
+    if(crescent(p,vec2(W()*.38,.86),.03)>0.){k=1.;sky=0.;}
+  }else{sky=0.;float z=1./max(H-uv.y,.004),x=(p.x-V.x)*z;
+    float s=noise(vec2(x*4.,z*.12+t*.5))*.7+noise(vec2(x*13.,z*.35+t*.5))*.5;
+    k=1.-smoothstep(.58,.66,s+(g-.5)*.25)-.8*exp(-(H-uv.y)*40.);}
+  return vec4(mix(ink,pap,step(.5,k)),sky);}`],
+
+  vortex: ['A two-ink riso print of the night sky swirling round a lone street lamp', `
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  vec3 ink=rgb(28.,56.,212.),pap=rgb(234.,222.,196.),blk=rgb(16.,16.,28.);
+  float t=u_time,g=h2(cell),sky=1.,k;vec2 C=vec2(m.x*.3,.5+m.y*.08),d=p-C;
+  float r=length(d),a=atan(d.y,d.x);
+  if(uv.y>.32){float sw=a+1.7/(r+.12)-t*.25;
+    float s=noise(vec2(sw*12.,r*3.))*.6+noise(vec2(sw*38.,r*9.))*.5;
+    k=s*smoothstep(1.,0.,r)*1.15+exp(-r*5.)*.7+(g-.5)*.4;
+    if(crescent(p,vec2(W()*.4,.88),.028)>0.){k=1.;sky=0.;}
+  }else{sky=0.;float z=1./max(C.y-uv.y,.004),x=(p.x-C.x)*z;
+    float s=noise(vec2(x*5.,z*.2+t*.3))*.7+noise(vec2(x*16.,z*.5))*.5;
+    k=1.-smoothstep(.6,.68,s+(g-.5)*.25);}
+  vec3 c=mix(ink,pap,step(.5,k));
+  if(box(p,vec2(C.x-.004,.3),vec2(C.x+.004,C.y-.02))+box(p,vec2(C.x-.014,C.y-.022),vec2(C.x+.014,C.y+.012))+tri(p,vec2(C.x,C.y+.01),.022,.024)>0.){c=blk;sky=0.;}
+  if(box(p,vec2(C.x-.008,C.y-.016),vec2(C.x+.008,C.y+.006))>0.)c=pap;
+  if(abs(uv.y-.3)<.004&&abs(p.x-C.x)<.07)c=blk;
+  return vec4(c,sky);}`],
+
+  train: ['The view from a train window, the countryside rushing past', `
+float ridge(float x,float a,float f,float o){return a*(.55*sin(x*f+o)+.3*sin(x*f*2.3+o*1.7)+.15*sin(x*f*5.1+o*.3));}
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,w=W(),sky=1.;
+  vec2 hs=vec2(min(w*.4,.78),.27),ce=vec2(0.,.56);
+  float sd=rbox(p,ce,hs,.07);
+  vec3 c=mix(rgb(96.,112.,104.),rgb(150.,166.,150.),uv.y*.8+.1);
+  if(sd<0.){sky=0.;
+    /* the carriage rattles: a soft sway plus a bump at every rail joint */
+    float bump=exp(-fract(t*1.4)*18.)*.006;
+    vec2 v=p-ce-m*vec2(.06,.05)+vec2(0.,sin(t*9.)*.0015+bump);
+    float y=v.y+.27,x=v.x;
+    c=mix(rgb(214.,232.,244.),rgb(122.,176.,228.),smoothstep(.15,.55,y));
+    float cl=fbm(vec2((x+t*.01)*2.5,y*6.));
+    if(cl>.62&&y>.32)c=mix(c,rgb(250.,252.,255.),smoothstep(.62,.75,cl));
+    float hm=.22+ridge(x+t*.02,.06,3.,1.);
+    if(y<hm){c=mix(rgb(150.,170.,196.),rgb(196.,210.,226.),smoothstep(hm-.1,hm,y));}
+    float hh=.15+ridge(x+t*.09,.035,5.,4.);
+    if(y<hh){c=mix(rgb(84.,130.,72.),rgb(120.,164.,92.),smoothstep(hh-.08,hh,y));
+      float tx=(x+t*.09)*30.,th=h2(vec2(floor(tx),2.));
+      if(th>.6&&tri(vec2(fract(tx),y),vec2(.5,hh-.01),.35,.03+.02*th)>0.)c=rgb(46.,86.,52.);}
+    if(y<.07){float g=noise(vec2((x+t*.6)*40.,y*30.));c=mix(rgb(96.,140.,60.),rgb(140.,176.,80.),g);
+      float fx=fract((x+t*.6)*9.);if(fx<.06&&y>.03)c=rgb(96.,76.,56.);
+      if(abs(y-.055)<.004)c=rgb(120.,96.,70.);}
+    /* telegraph poles flashing past, wires sagging between them */
+    float px=(x+t*1.6)*1.1,pf=fract(px);
+    float sag=.24-.05*4.*pf*(1.-pf);
+    if(pf<.035&&y<.27)c=rgb(40.,34.,30.);
+    if(abs(y-sag)<.0055||abs(y-sag+.03)<.0055)c=rgb(54.,48.,44.);
+    c=mix(c,rgb(240.,246.,250.),smoothstep(-.04,0.,sd)*.25);
+    c+=vec3(.06)*step(abs(v.x*.8+v.y-.18+m.x*.1),.025);
+  }else if(sd<.03){sky=0.;c=mix(rgb(230.,226.,214.),rgb(170.,164.,150.),smoothstep(0.,.03,sd));}
+  else c-=vec3(.08)*smoothstep(.1,.03,sd);
+  if(uv.y<.17){c=mix(rgb(120.,62.,48.),rgb(150.,82.,62.),step(.5,fract(p.x*14.)))*.9;sky=0.;}
+  if(abs(uv.y-.17)<.01){c=rgb(196.,178.,140.);sky=0.;}
+  return vec4(c,sky);}`],
+  poppies: ['A stormy sky over a field of red poppies blowing in the wind', `
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,H=.42,y=uv.y,sky=1.,wind=.7+m.x*1.6*u_hover;
+  float cl=fbm(vec2(p.x*1.6-t*.02,y*2.5));
+  vec3 c=mix(rgb(46.,60.,76.),rgb(118.,132.,142.),cl*1.15-.2);
+  c=mix(c,rgb(28.,36.,48.),smoothstep(.55,1.,y)*.55);
+  c=mix(c,rgb(255.,226.,170.),exp(-abs(y-H-.035)*16.)*(.55+.45*fbm(vec2(p.x*3.,1.)))*.95);
+  float hz=H+.01*sin(p.x*3.);
+  if(y<hz){sky=0.;float dep=(hz-y)/hz;
+    c=mix(rgb(72.,74.,58.),rgb(26.,30.,24.),dep);
+    c=mix(c,rgb(10.,14.,10.),step(.7,noise(vec2(p.x*110.+sin(y*40.+t*1.5)*2.*wind,y*14.)))*.55);
+    c=mix(c,rgb(160.,140.,100.),exp(-dep*14.)*.45);
+    for(int i=0;i<3;i++){float fi=float(i),cs=.025+fi*.045,y0=hz*(1.-fi*.34),y1=hz*(.66-fi*.34);
+      vec2 q=vec2(p.x+fi*3.1,y)/cs;q.y+=h2(vec2(floor(q.x),fi+4.));vec2 id=floor(q),f=fract(q);float h=h2(id+fi*11.);
+      vec2 o=vec2(.3+.4*h2(id+2.)+sin(t*1.6+id.x*.7)*.12*wind,.3+.4*h2(id+9.));
+      float dd=length((f-o)*vec2(1.,1.4));
+      if(y<y0+cs*.3&&y>y1-cs&&h>.25&&dd<.2+.16*h2(id+6.)){c=mix(rgb(176.,26.,22.),rgb(236.,80.,52.),smoothstep(.0,.3,f.y-o.y+.12));
+        if(dd<.07)c=rgb(30.,12.,12.);}}}
+  for(int i=0;i<2;i++){float fi=float(i),s=9.+fi*6.;vec2 q=cell/s;q.x-=t*(1.5+fi)*wind;q.y+=sin(q.x*.4+t)*.4;
+    vec2 id=floor(q),f=fract(q);if(h2(id+fi*5.)>.86&&length((f-.5)*s)<1.+fi*.6){c=rgb(214.,48.,36.);sky=0.;}}
+  return vec4(c,sky);}`],
+
+  castle: ['A pixel castle on a hill at night, with flickering windows and a flag in the wind', `
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,w=W(),y=uv.y,sky=1.;vec2 q=p+vec2(m.x*.04,0.);float x=q.x;
+  vec3 c=mix(rgb(44.,38.,96.),rgb(10.,12.,40.),smoothstep(.2,1.,y));
+  float s=h2(cell);if(s>.991&&y>.35)c+=vec3(.75)*(.5+.5*sin(t*2.+s*70.));
+  vec2 mc=vec2(w*.3+m.x*.02,.8);float md=length(p-mc);
+  c+=rgb(130.,116.,210.)*exp(-md*6.)*.55;
+  if(md<.08){c=mix(rgb(252.,242.,214.),rgb(212.,200.,180.),step(.6,fbm((p-mc)*30.)));sky=0.;}
+  float cd=fbm(vec2(p.x*2.-t*.03,y*5.))*smoothstep(.98,.6,y)*smoothstep(.45,.62,y);
+  if(cd>.4)c=mix(c,rgb(58.,52.,104.),.85);
+  if(y<.33+.05*sin(p.x*2.2+1.)+.04*fbm(vec2(p.x*3.,1.))){c=mix(rgb(52.,48.,108.),rgb(70.,64.,130.),fbm(p*8.)*.6);sky=0.;}
+  float hb=.24,cs=box(q,vec2(-.36,hb),vec2(.36,.42))+box(q,vec2(-.36,.42),vec2(.36,.445))*step(.5,fract((x+.36)/.03))
+    +box(q,vec2(-.17,hb),vec2(.17,.56))+box(q,vec2(-.17,.56),vec2(.17,.585))*step(.5,fract((x+.17)/.034))
+    +box(q,vec2(-.35,hb),vec2(-.25,.62))+box(q,vec2(.25,hb),vec2(.35,.62))+box(q,vec2(-.05,hb),vec2(.05,.72));
+  float roof=tri(q,vec2(-.3,.62),.066,.14)+tri(q,vec2(.3,.62),.066,.14)+tri(q,vec2(0.,.72),.07,.18);
+  if(cs>0.){sky=0.;c=rgb(14.,12.,34.);c=mix(c,rgb(90.,84.,160.),step(.92,fract(x/.05+.2))*step(0.,x)*.5);c=mix(c,rgb(58.,54.,110.),step(.8,fract(x/.05+.2))*.25);
+    vec2 wq=vec2(x/.05,y/.06),wid=floor(wq),wf=fract(wq);
+    if(abs(wf.x-.5)<.18&&abs(wf.y-.5)<.24&&y>.29&&y<.68){
+      float near=exp(-length(q-vec2((u_mouse.x-.5)*w,u_mouse.y))*6.)*u_hover;
+      float on=step(.45-near*.6,h2(wid))*step(.25,noise(vec2(t*1.5,wid.x+wid.y*7.)));
+      c=mix(c,mix(rgb(255.,190.,80.),rgb(255.,236.,160.),noise(vec2(t*6.,wid.x))),on);}}
+  if(roof>0.){c=mix(rgb(70.,28.,64.),rgb(110.,46.,86.),step(0.,x-floor(x/.2)*.2-.1)*.0+step(.5,fract(y/.025))*.25);sky=0.;}
+  if(box(q,vec2(-.003,.9),vec2(.003,.98))>0.){c=rgb(24.,22.,56.);sky=0.;}
+  float fy=.95+sin(x*40.-t*6.)*.008*(x/.08);
+  if(box(q,vec2(.003,fy),vec2(.08,fy+.026))>0.){c=mix(rgb(220.,60.,70.),rgb(255.,120.,110.),step(0.,sin(x*40.-t*6.)));sky=0.;}
+  if(y<.22+.07*cos(p.x*1.4)){c=mix(rgb(16.,16.,40.),rgb(30.,30.,64.),fbm(p*vec2(30.,60.))*.5);sky=0.;}
+  for(int i=0;i<2;i++){float fi=float(i),sz=14.+fi*8.;vec2 fq=cell/sz+vec2(t*.15,sin(t*.5+fi)*.3);vec2 id=floor(fq),f=fract(fq);
+    float h=h2(id+fi*3.);vec2 o=.5+.3*vec2(sin(t*1.3+h*20.),cos(t*1.1+h*30.));
+    if(h>.72&&y<.3&&length((f-o)*sz)<1.){c=rgb(220.,255.,140.)*(.6+.4*sin(t*4.+h*50.));sky=0.;}}
+  return vec4(c,sky);}`],
+
+  vista: ['An anime summer sky with tall clouds, a snowy peak and grass moving in the breeze', `
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,y=uv.y,sky=1.,w=W();
+  vec3 c=mix(rgb(176.,220.,240.),rgb(34.,122.,200.),smoothstep(.35,1.,y));
+  for(int i=0;i<5;i++){float fi=float(i),cx=mod(fi*.83+.2-t*.006*(1.+fi*.2)+m.x*.04,w+.8)-w*.5-.4;
+    vec2 cc=vec2(cx,.62+.07*sin(fi*2.3)),d=p-cc;
+    float r=.13+.05*h2(vec2(fi,2.)),blob=length(d*vec2(.62,1.))-r-.09*fbm(d*7.+fi*9.)+.05*smoothstep(0.,-.08,d.y);
+    if(blob<0.&&y>cc.y-.08){sky=0.;float top=clamp((d.y+.08)/(r+.1),0.,1.)+.25*fbm(d*12.)-.15*d.x/r;
+      c=top<.35?rgb(232.,166.,124.):top<.62?rgb(250.,214.,180.):rgb(255.,251.,244.);}}
+  float x=p.x+m.x*.03,pk=.4+.4*max(0.,1.-abs(x-.1)*2.)+.06*(ridged(vec2(x*5.,2.))-.5);
+  if(y<pk){sky=0.;float side=x-.1+.04*(fbm(vec2(y*12.,3.))-.5);
+    c=side<0.?rgb(150.,176.,206.):rgb(96.,128.,166.);
+    if(y>.58+.05*fbm(vec2(x*16.,1.))){c=side<0.?rgb(255.,255.,255.):rgb(196.,212.,234.);
+      if(fbm(vec2(x*40.,y*6.))>.62)c=mix(c,rgb(120.,146.,180.),.6);}
+    c=mix(c,rgb(176.,214.,236.),.3);}
+  float h1=.37+.04*fbm(vec2((p.x+m.x*.06)*3.,4.))+.02*sin(p.x*3.);
+  if(y<h1){sky=0.;c=mix(rgb(56.,118.,130.),rgb(118.,176.,184.),smoothstep(h1-.12,h1,y));}
+  float gx=p.x+m.x*.1,gh=.24+.04*sin(gx*2.)+.02*fbm(vec2(gx*6.,7.));
+  if(y<gh){sky=0.;float b=noise(vec2(gx*90.+sin(t*1.3+gx*4.)*(gh-y)*60.,y*10.));
+    c=mix(rgb(66.,136.,48.),rgb(156.,208.,88.),smoothstep(0.,gh,y)*.7+.3*b);
+    c=mix(c,rgb(38.,88.,40.),step(.7,b)*.6);
+    float rk=fbm(vec2(gx*5.,y*12.));if(rk>.64&&y<gh-.03)c=mix(rgb(176.,170.,150.),rgb(230.,224.,204.),step(.7,rk));}
+  return vec4(c,sky);}`]
+};
+
