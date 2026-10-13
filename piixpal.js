@@ -932,6 +932,351 @@ canvas.held{cursor:grabbing}
   }
 }
 
+/* ---- elements/gl.js ---- */
+/* GL: the GPU side of Piixpal. One shared WebGL canvas that every shader component borrows,
+ * so a page can have dozens of them without running out of contexts (browsers allow about 16).
+ * A component renders its shader at a low "pixel grid" resolution, then copies the result into
+ * its own canvas, which the browser scales up crisp. That's the pixel look, and it's also why
+ * these are cheap: a 1200 x 600 hero with 4 px pixels is only 300 x 150 shader pixels.
+ *
+ * Every shader gets the same toolkit: noise, fbm, an 8x8 Bayer matrix, and a palette with
+ * ordered dithering, so gradients fall into the theme's colours in that crunchy pixel way. */
+
+const GL = { cv: null, gl: null, ok: null, lost: false, buf: null, progs: {}, tex: new WeakMap() };
+
+/* the theme's palettes, dark to light. Shaders read them as up to six colours */
+const GL_PALETTES = {
+  lime: ['#0b0a10', '#1b3410', '#4f7d10', '#a8d81c', '#c6f432', '#f2ffd6'],
+  aurora: ['#06050c', '#0d2b3a', '#127a74', '#25d6a0', '#9ef5cf', '#e4dcff'],
+  sunset: ['#160925', '#4d1650', '#b0285e', '#ff5a6e', '#ff9b45', '#ffe08a'],
+  ocean: ['#030b18', '#0a2c55', '#1d6fb0', '#58c8ff', '#bfeaff', '#ffffff'],
+  candy: ['#1c0b2e', '#5b2bd6', '#c43bd8', '#ff6bb5', '#ffd23f', '#fffbe6'],
+  violet: ['#0c0718', '#221048', '#4a2bb0', '#6b4cff', '#a996ff', '#ece6ff'],
+  fire: ['#050202', '#5a0b0b', '#c22a10', '#ff6b1f', '#ffc23a', '#fff4c8'],
+  gameboy: ['#0f380f', '#306230', '#8bac0f', '#9bbc0f'],
+  paper: ['#f3eee3', '#e2d9c6', '#a99d88', '#6c6477', '#17121f'],
+  mono: ['#0b0a10', '#3b3448', '#8e869c', '#f3eee3']
+};
+const glPalette = name => {
+  const list = GL_PALETTES[name] || (name && name.includes('#') ? name.split(',').map(s => s.trim()).filter(Boolean) : null) || GL_PALETTES.lime;
+  const arr = new Float32Array(18);
+  list.slice(0, 6).forEach((c, i) => { const [r, g, b] = hexRGBA(c); arr[i * 3] = r / 255; arr[i * 3 + 1] = g / 255; arr[i * 3 + 2] = b / 255; });
+  return { arr, n: Math.min(6, list.length), list };
+};
+
+const GL_VERT = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
+/* what every fragment shader starts with */
+const GL_PRELUDE = `precision highp float;
+uniform vec2 u_res;uniform float u_time;uniform vec2 u_mouse;uniform float u_hover;uniform float u_intro;
+uniform vec3 u_pal[6];uniform float u_n;uniform float u_dither;uniform float u_seed;uniform vec4 u_k;uniform vec4 u_j;
+uniform sampler2D u_tex;
+float hash(vec2 p){p=fract(p*vec2(123.34,456.21)+u_seed*.013);p+=dot(p,p+45.32);return fract(p.x*p.y);}
+float noise(vec2 p){vec2 i=floor(p),f=fract(p),u=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),u.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x),u.y);}
+float fbm(vec2 p){float v=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int i=0;i<5;i++){v+=a*noise(p);p=m*p;a*=.5;}return v;}
+float bayer2(vec2 a){a=floor(a);return fract(dot(a,vec2(.5,a.y*.75)));}
+float bayer4(vec2 a){return bayer2(.5*a)*.25+bayer2(a);}
+float bayer8(vec2 a){return bayer4(.5*a)*.25+bayer2(a);}
+vec3 pal(float v){v=clamp(v,0.,1.)*(u_n-1.);vec3 c=u_pal[0];for(int i=1;i<6;i++){if(float(i)<u_n)c=mix(c,u_pal[i],clamp(v-float(i-1),0.,1.));}return c;}
+vec3 dpal(float v,vec2 cell){float n=u_n-1.;float q=clamp(v,0.,1.)*n+(bayer8(cell)-.5)*u_dither;return pal(floor(q+.5)/n);}
+vec2 aspect(vec2 uv){return (uv-.5)*vec2(u_res.x/u_res.y,1.);}
+`;
+/* and ends with: one pixel per fragment, plus the pixel-dissolve intro every component can use */
+const GL_MAIN = `
+void main(){vec2 cell=floor(gl_FragCoord.xy);vec2 uv=(cell+.5)/u_res;vec4 c=effect(uv,cell);
+if(u_intro<1.){float th=bayer8(cell)*.75+(1.-uv.y)*.25;if(th>u_intro)c.a=0.;}
+gl_FragColor=vec4(c.rgb*c.a,c.a);}`;
+
+const glInit = () => {
+  if (GL.ok !== null) return GL.ok && !GL.lost;
+  try {
+    const cv = document.createElement('canvas');
+    const gl = cv.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: false, powerPreference: 'low-power' });
+    if (!gl) return (GL.ok = false);
+    GL.cv = cv; GL.gl = gl;
+    /* compile shaders in the background where the browser can, so a big one never freezes the page */
+    GL.par = gl.getExtension('KHR_parallel_shader_compile');
+    const setup = () => {
+      GL.buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, GL.buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    };
+    setup();
+    /* if the GPU resets, drop everything and rebuild when it comes back */
+    cv.addEventListener('webglcontextlost', e => { e.preventDefault(); GL.lost = true; GL.progs = {}; GL.tex = new WeakMap(); });
+    cv.addEventListener('webglcontextrestored', () => { GL.lost = false; setup(); });
+    return (GL.ok = true);
+  } catch (_) { return (GL.ok = false); }
+};
+
+const glProgram = body => {
+  const gl = GL.gl;
+  const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
+  const v = sh(gl.VERTEX_SHADER, GL_VERT), f = sh(gl.FRAGMENT_SHADER, GL_PRELUDE + body + GL_MAIN);
+  const p = gl.createProgram(); gl.attachShader(p, v); gl.attachShader(p, f); gl.linkProgram(p);
+  return { prog: p, v, f, pending: true, u: {} };
+};
+/* is it ready? false while it's still compiling in the background, null if it failed */
+const glReady = P => {
+  if (!P.pending) return P;
+  const gl = GL.gl;
+  if (GL.par && !gl.getProgramParameter(P.prog, GL.par.COMPLETION_STATUS_KHR)) return false;
+  P.pending = false;
+  if (!gl.getProgramParameter(P.prog, gl.LINK_STATUS)) {
+    console.warn('[piixpal] shader:', gl.getShaderInfoLog(P.f) || gl.getProgramInfoLog(P.prog));
+    return null;
+  }
+  P.pos = gl.getAttribLocation(P.prog, 'p');
+  return P;
+};
+
+/* draw a shader at w x h into the shared canvas; returns where to copy it from.
+ * u: uniforms by name. tex: { owner, src, dirty } to bind an image or canvas as u_tex */
+const glDraw = (body, w, h, u, tex) => {
+  if (!glInit()) return null;
+  const gl = GL.gl, cv = GL.cv;
+  if (cv.width < w || cv.height < h) { cv.width = Math.max(cv.width, w); cv.height = Math.max(cv.height, h); }
+  const P0 = GL.progs[body] || (GL.progs[body] = glProgram(body)), P = glReady(P0);
+  if (P === null) GL.progs[body] = { failed: true };
+  if (!P || P0.failed) return null;
+  gl.useProgram(P.prog);
+  gl.viewport(0, 0, w, h);
+  gl.disable(gl.SCISSOR_TEST); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.bindBuffer(gl.ARRAY_BUFFER, GL.buf); gl.enableVertexAttribArray(P.pos); gl.vertexAttribPointer(P.pos, 2, gl.FLOAT, false, 0, 0);
+  for (const k in u) {
+    let loc = P.u[k];
+    if (loc === undefined) loc = P.u[k] = gl.getUniformLocation(P.prog, k === 'u_pal' || (u[k] instanceof Float32Array && u[k].length > 4) ? k + '[0]' : k);
+    if (!loc) continue;
+    const v = u[k];
+    if (k === 'u_pal') gl.uniform3fv(loc, v);
+    else if (v instanceof Float32Array && v.length > 4) gl.uniform4fv(loc, v);
+    else if (typeof v === 'number') gl.uniform1f(loc, v);
+    else if (v.length === 2) gl.uniform2f(loc, v[0], v[1]);
+    else if (v.length === 3) gl.uniform3f(loc, v[0], v[1], v[2]);
+    else gl.uniform4f(loc, v[0], v[1], v[2], v[3]);
+  }
+  if (tex && tex.src) {
+    let t = GL.tex.get(tex.owner);
+    const fresh = !t;
+    if (!t) { t = gl.createTexture(); GL.tex.set(tex.owner, t); }
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, t);
+    if (fresh || tex.dirty) {
+      const wrap = tex.repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE;
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, tex.src); } catch (_) { return null; }
+    }
+    if (P.u.u_tex === undefined) P.u.u_tex = gl.getUniformLocation(P.prog, 'u_tex');
+    if (P.u.u_tex) gl.uniform1i(P.u.u_tex, 0);
+  }
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  return { cv, sy: cv.height - h };
+};
+
+/* ---------- the stage every shader component stands on ----------
+ * a small canvas in a shadow root, scaled up crisp; the pointer and hover are tracked; it only
+ * draws while on screen; reduced motion gets one still frame; without WebGL it shows a gradient */
+class GLStage extends HTMLElement {
+  static get observedAttributes() { return ['kind', 'effect', 'palette', 'pixel', 'dither', 'speed', 'fill', 'height', 'src', 'tone', 'look']; }
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this._tick = this._tick.bind(this);
+    this._vis = true; this._t0 = now(); this._m = [.5, .5]; this._hov = 0; this._seed = Math.random() * 100;
+  }
+  connectedCallback() {
+    this._build();
+    this._io = new IntersectionObserver(es => { const v = es[es.length - 1].isIntersecting; if (v && !this._seen) { this._seen = now(); } this._vis = v; }, { rootMargin: '60px' });
+    this._io.observe(this);
+    this._ro = new ResizeObserver(() => this._fit()); this._ro.observe(this);
+    sub(this._tick);
+  }
+  disconnectedCallback() { unsub(this._tick); if (this._io) this._io.disconnect(); if (this._ro) this._ro.disconnect(); }
+  attributeChangedCallback(n, a, b) { if (a !== b && this._cv) this._build(); }
+  _css() { return ''; }
+  _html() { return '<canvas part="canvas" aria-hidden="true"></canvas><slot></slot>'; }
+  _build() {
+    const fill = this.hasAttribute('fill');
+    if (fill && this.parentElement) {
+      const p = this.parentElement;
+      if (getComputedStyle(p).position === 'static') p.style.position = 'relative';
+      p.style.isolation = 'isolate';
+    }
+    this._pal = glPalette(this.getAttribute('palette') || this._defPal);
+    const hgt = this.getAttribute('height');
+    this.shadowRoot.innerHTML = `<style>
+:host{display:block;position:${fill ? 'absolute' : 'relative'};${fill ? 'inset:0;z-index:-1;pointer-events:none;' : ''}${!fill && hgt ? `height:${/^\d+$/.test(hgt) ? hgt + 'px' : hgt};` : ''}${this._hostCss ? this._hostCss() : ''}}
+:host([hidden]){display:none}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:pixelated;image-rendering:crisp-edges;pointer-events:none}
+${this._css()}</style>${this._html()}`;
+    this._cv = this.shadowRoot.querySelector('canvas');
+    this._g = this._cv.getContext('2d');
+    if (!glInit()) {
+      /* no WebGL: a still gradient in the same colours */
+      const l = this._pal.list;
+      this._cv.style.background = `linear-gradient(135deg,${l[0]},${l[Math.floor(l.length / 2)]},${l[l.length - 1]})`;
+    }
+    if (this._setup) this._setup();
+    this._fit();
+  }
+  _fit() {
+    if (!this._cv) return;
+    const r = (this._box ? this._box() : this).getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+    const px = Math.max(1, (+this.getAttribute('pixel') || this._defPx || 4) * dpr);
+    this._px = px;
+    this._W = Math.max(2, Math.ceil(r.width * dpr / px)); this._H = Math.max(2, Math.ceil(r.height * dpr / px));
+    if (this._cv.width !== this._W || this._cv.height !== this._H) { this._cv.width = this._W; this._cv.height = this._H; }
+    this._still = false;
+    if (this._resized) this._resized();
+  }
+  _tick(dt) {
+    if (!this._vis || !this._W || !GL.ok) return;
+    const R = reduced();
+    if (R && this._still && !this._dirty) return;
+    /* nothing to show (an idle cursor trail, a finished reveal): clear once and rest */
+    if (this._skip && this._skip()) { if (!this._cleared) { this._g.clearRect(0, 0, this._W, this._H); this._cleared = true; } return; }
+    this._cleared = false;
+    const r = this.getBoundingClientRect();
+    const over = ptr.seen && ptr.cx >= r.left - 40 && ptr.cx <= r.right + 40 && ptr.cy >= r.top - 40 && ptr.cy <= r.bottom + 40;
+    if (over) { const mx = (ptr.cx - r.left) / r.width, my = 1 - (ptr.cy - r.top) / r.height; this._m[0] = lerp(this._m[0], mx, Math.min(1, dt * 10)); this._m[1] = lerp(this._m[1], my, Math.min(1, dt * 10)); }
+    this._hov = lerp(this._hov, over && ptr.cx >= r.left && ptr.cx <= r.right && ptr.cy >= r.top && ptr.cy <= r.bottom ? 1 : 0, Math.min(1, dt * 5));
+    const speed = this.hasAttribute('speed') ? +this.getAttribute('speed') : 1;
+    const T = R ? 12 : (now() - this._t0) / 1000 * speed;
+    const intro = R || !this._introLen ? 1 : clamp((now() - (this._seen || now())) / 1000 / this._introLen, 0, 1);
+    const u = Object.assign({
+      u_res: [this._W, this._H], u_time: T, u_mouse: this._m, u_hover: this._hov, u_intro: intro, u_pal: this._pal.arr, u_n: this._pal.n,
+      u_dither: this.hasAttribute('dither') ? +this.getAttribute('dither') : this._defDither ?? 1, u_seed: this._seed, u_k: [0, 0, 0, 0], u_j: [0, 0, 0, 0]
+    }, this._uniforms ? this._uniforms(T, dt) : {});
+    const out = glDraw(this._shader(), this._W, this._H, u, this._texture ? this._texture() : null);
+    if (!out) return;
+    this._g.clearRect(0, 0, this._W, this._H);
+    this._g.drawImage(out.cv, 0, out.sy, this._W, this._H, 0, 0, this._W, this._H);
+    this._dirty = false;
+    this._still = R;
+  }
+}
+Piixpal.gl = { palettes: GL_PALETTES, draw: glDraw, supported: () => glInit() };
+
+/* the frame shader buttons and cards share: a pixel border with light running round it, a dark
+ * face with a little grain, a spotlight that follows the pointer, and a ring where you click.
+ * u_k = (click x, click y, seconds since the click, border width in pixels), u_j.x = face lift */
+const GL_FRAME = `vec4 effect(vec2 uv,vec2 cell){
+  vec2 sz=u_res,d=min(cell,sz-1.-cell);float b=u_k.w,e=min(d.x,d.y);
+  if(d.x+d.y<b*1.5)return vec4(0.);
+  vec2 q=aspect(uv),m=aspect(u_mouse);
+  if(e<b){float a=atan(uv.y-.5,(uv.x-.5)*sz.x/sz.y)/6.2831+.5;
+    float v=.5+.5*sin((a-u_time*.22)*6.2831*2.);v=mix(v*.9+.1,1.,u_hover*.35);return vec4(dpal(v,cell),1.);}
+  float v=.05+u_j.x+.05*hash(cell)+.3*exp(-length(q-m)*2.8)*u_hover;
+  if(u_k.z<1.2){vec2 c=aspect(u_k.xy);float r=u_k.z*1.5,ring=smoothstep(.07,0.,abs(length(q-c)-r))*(1.-u_k.z/1.2);v+=ring*.75;}
+  return vec4(dpal(v,cell),1.);}`;
+
+/* ---------- looks: the same frame in other design languages ----------
+ * every look shares the frame's inputs: u_k = (click x, click y, seconds since click, border),
+ * u_j.x = face lift, u_mouse, u_hover. Corners are cut in steps the same way. */
+const GL_LOOK_HEAD = `vec4 effect(vec2 uv,vec2 cell){
+  vec2 sz=u_res,d=min(cell,sz-1.-cell);float b=u_k.w,e=min(d.x,d.y);
+  if(d.x+d.y<b*1.5)return vec4(0.);
+  vec2 q=aspect(uv),m=aspect(u_mouse);
+  float ring=0.;if(u_k.z<1.2){vec2 c=aspect(u_k.xy);ring=smoothstep(.07,0.,abs(length(q-c)-u_k.z*1.5))*(1.-u_k.z/1.2);}`;
+const GL_LOOKS = {
+  glow: ['lime', GL_FRAME],
+  /* Y2K liquid chrome: a bright sky above a dark horizon line, rippling, with a hot spot under the pointer */
+  chrome: ['#0e0c14,#353a4a,#6f7890,#aab3c6,#dde3ee,#ffffff', GL_LOOK_HEAD + `
+  float y=uv.y+.05*sin(uv.x*4.+u_time*.8)+.08*(fbm(q*1.6+u_time*.1)-.5)+(u_mouse.y-.5)*.18*u_hover;
+  float hz=clamp(6./sz.y,.1,.3);
+  float v=y>hz?mix(.68,1.,smoothstep(hz,1.,y)):mix(.62,.3,smoothstep(.0,hz-.02,y));
+  v*=1.-.7*smoothstep(.03,0.,abs(y-hz));
+  if(e<b)v=uv.y>.5?1.:.35;
+  v+=.35*exp(-length(q-m)*6.)*u_hover+ring*.5;
+  float n=u_n-1.,qv=clamp(v,0.,1.)*n+(bayer8(cell)-.5)*.45;
+  return vec4(pal(floor(qv+.5)/n),1.);}`],
+  /* frosted glass: mostly see-through (the host blurs what's behind), a lit rim, a glare that sweeps with the pointer */
+  glass: ['mono', GL_LOOK_HEAD + `
+  float bay=bayer8(cell);
+  if(e<b){float lit=mix(1.,.55,smoothstep(0.,1.,(1.-uv.y)*.7+uv.x*.3));return vec4(dpal(lit+.1*u_hover,cell),1.);}
+  float gx=uv.x+uv.y*.55-mix(-.2,1.6,u_hover>.05?u_mouse.x:fract(u_time*.08));
+  float glare=smoothstep(.07,0.,abs(gx))*.85+smoothstep(.2,0.,abs(gx-.12))*.2;
+  float top=smoothstep(b+2.,b,d.y)*step(sz.y*.5,cell.y)*.7;
+  float a=glare*.6+top+ring*.6+.2*exp(-length(q-m)*5.)*u_hover;
+  return vec4(dpal(.9+glare*.1,cell),step(bay+.02,a));}`],
+  /* two-ink risograph: solid ink face, a halftone edge, and a second ink laid down a little off-register */
+  riso: ['#1c38d4,#ff4f9a,#eadcc4', GL_LOOK_HEAD + `
+  vec3 A=u_pal[0],B=u_pal[1],P=u_pal[2];
+  vec2 mis=vec2(3.,-2.)+(u_mouse-.5)*vec2(8.,6.)*u_hover+vec2(sin(u_time*1.1),cos(u_time*.9))*.7;
+  float hw=min(6.,sz.y*.18),sh=min(cell.y,sz.x-1.-cell.x),hdot=step(length(mod(cell,4.)-1.5),mix(1.9,.5,smoothstep(b,b+hw,sh)));
+  float a=e<b?1.:(sh<b+hw?hdot:1.);
+  vec2 cb=cell-floor(mis),db=min(cb,sz-1.-cb);float eb=min(db.x,db.y);
+  float bb=step(0.,eb)*step(eb,b+1.)+ring;
+  vec3 col=mix(P,A,a);
+  if(bb>0.)col=a>0.?A*B*1.25:B;
+  return vec4(col,1.);}`],
+  /* green phosphor terminal: scanlines, a double rule, flicker, and a burst of static when clicked */
+  crt: ['#020805,#06301a,#138a3c,#46ff7e,#d2ffe0', GL_LOOK_HEAD + `
+  float fl=.94+.06*sin(u_time*53.)*sin(u_time*7.);
+  float v=.06+.05*hash(cell+floor(u_time*12.));
+  if(e<1.||(e>=2.&&e<3.))v=.75;
+  v+=.35*exp(-e*.25)*(.6+.4*u_hover);
+  v+=.25*exp(-length(q-m)*4.)*u_hover;
+  if(u_k.z<.35)v+=step(.6,hash(cell+floor(u_time*30.)))*(1.-u_k.z/.35)*.8;
+  v*=mod(cell.y,2.)<1.?1.:.55;
+  return vec4(dpal(v*fl,cell),1.);}`]
+};
+const glLook = el => { const l = el.getAttribute('look'); return GL_LOOKS[l] ? l : 'glow'; };
+/* text that sits on each look */
+const GL_LOOK_TEXT = {
+  glow: list => `color:${list[list.length - 1]};text-shadow:0 1px 0 rgba(0,0,0,.5)`,
+  chrome: () => 'color:#0e0c14;text-shadow:0 1px 0 rgba(255,255,255,.85),0 -1px 0 rgba(0,0,0,.25)',
+  glass: () => 'color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.45)',
+  riso: list => `color:${list[2] || '#eadcc4'}`,
+  crt: list => `color:${list[3] || '#46ff7e'};text-shadow:0 0 8px ${list[3] || '#46ff7e'}88;font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace!important;letter-spacing:0`
+};
+/* glass needs the page behind it blurred; everything else is opaque */
+const glLookHost = look => look === 'glass' ? `-webkit-backdrop-filter:blur(14px) saturate(1.5);backdrop-filter:blur(14px) saturate(1.5);background:rgba(255,255,255,.07);clip-path:${kitCorners(3)};` : '';
+
+/* any CSS colour, as 0..1 rgb for a shader */
+const glRGB = c => {
+  const x = document.createElement('canvas').getContext('2d'); x.fillStyle = '#000'; x.fillStyle = c;
+  const s = x.fillStyle;
+  if (s[0] === '#') return hexRGBA(s).slice(0, 3).map(v => v / 255);
+  return (s.match(/[\d.]+/g) || [0, 0, 0]).slice(0, 3).map(v => +v / 255);
+};
+
+/* ---- elements/kit.js ---- */
+/* KIT: the shared look of the pixel UI kit. Stepped pixel corners, chunky ink borders, a hard
+ * shadow the control presses down into, a few colour tones, and a tiny pal painter. Every kit
+ * component (button, toggle, progress, slider, checkbox…) is built from these. */
+
+const KIT_U = 4;
+/* a clip-path with two-step pixel corners, u px per step */
+const kitCorners = (u = KIT_U) => `polygon(0 ${2 * u}px,${u}px ${2 * u}px,${u}px ${u}px,${2 * u}px ${u}px,${2 * u}px 0,calc(100% - ${2 * u}px) 0,calc(100% - ${2 * u}px) ${u}px,calc(100% - ${u}px) ${u}px,calc(100% - ${u}px) ${2 * u}px,100% ${2 * u}px,100% calc(100% - ${2 * u}px),calc(100% - ${u}px) calc(100% - ${2 * u}px),calc(100% - ${u}px) calc(100% - ${u}px),calc(100% - ${2 * u}px) calc(100% - ${u}px),calc(100% - ${2 * u}px) 100%,${2 * u}px 100%,${2 * u}px calc(100% - ${u}px),${u}px calc(100% - ${u}px),${u}px calc(100% - ${2 * u}px),0 calc(100% - ${2 * u}px))`;
+
+/* tones: [fill, text on it] */
+const KIT_TONES = {
+  lime: ['#c6f432', '#17121f'], coral: ['#ff6b4a', '#ffffff'], violet: ['#6b4cff', '#ffffff'], sky: ['#58c8ff', '#17121f'],
+  sun: ['#ffd23f', '#17121f'], mint: ['#25b89a', '#ffffff'], ink: ['#17121f', '#ffffff'], paper: ['#fbf8f1', '#17121f']
+};
+const kitTone = el => KIT_TONES[el.getAttribute('tone')] || KIT_TONES[el._defTone || 'lime'];
+const KIT_FONT = '"Silkscreen","Press Start 2P",ui-monospace,Menlo,Consolas,monospace';
+
+/* the styles every kit component shares: the ink frame, the face inside it, the shadow under it */
+const kitCss = () => `
+:host{--ink:#17121f;--u:${KIT_U}px;position:relative;display:inline-block;vertical-align:middle;font:400 14px/1.1 ${KIT_FONT};-webkit-tap-highlight-color:transparent}
+:host([hidden]){display:none}
+.drop,.frame,.face{display:block}
+.frame{position:relative;background:var(--ink);clip-path:${kitCorners()};padding:var(--u)}
+.face{position:relative;clip-path:${kitCorners(KIT_U / 2)}}
+.drop{position:relative;filter:drop-shadow(0 var(--u) 0 var(--ink));transition:filter .08s,transform .08s}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}`;
+
+/* a pal's frame, drawn crisp into a canvas at s px per pixel */
+const kitPal = (cv, name, clip, i, s) => {
+  const sp = SPRITES[name]; if (!sp) return false;
+  const b = baked(sp), fr = b[clip] || b[Object.keys(b)[0]], img = fr[Math.max(0, i | 0) % fr.length];
+  if (cv.width !== sp.w * s || cv.height !== sp.h * s) { cv.width = sp.w * s; cv.height = sp.h * s; }
+  const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.clearRect(0, 0, cv.width, cv.height); g.drawImage(img, 0, 0, cv.width, cv.height);
+  return true;
+};
+const kitClip = (name, want) => { const sp = SPRITES[name], c = sp ? Object.keys(sp.frames) : []; return want.find(w => c.includes(w)) || c[0]; };
+
 /* ---- elements/sprite.js ---- */
 /* <piix-sprite name="mochi" size="96"></piix-sprite>
  * Self-contained characters you can paste anywhere: they sit inline like an image.
@@ -1954,10 +2299,10 @@ Object.assign(Piixpal, {
   clear: () => document.querySelectorAll(['piix-pal', 'piix-sprite', ...Object.values(ELEMENTS)].join()).forEach(e => e.remove())
 });
 
-Piixpal._k = { reduceMQ, reduced, clamp, rnd, chance, pick, lerp, now, hexRGBA, ptr, ptrDist, scroll, subs, raf, frame, sub, unsub, rectOf, docW, boxOf, pin, areaOf, onScreen, surfaceAt, LAYER_CSS, layer, origin, getLayer, layerOrigin, SPRITES, bake, defineSprite, baked, ACTORS, shout, Actor, recruit, BEHAVIORS, defineBehavior, Piixpal, art, lastT, layerRoot, ICON_PAL, ICONS, DIGITS, numberIcon, iconCache, iconPal, bakeIcon, UI_INK, UI_PAPER, UI_FONT, UI_MONO, UI_CSS, uiHost, uiRoot, uiStyles, uiStyle, uiEl, uiIcon, uiCard, uiPlace, uiAt, uiClose, uiAnnounce, uiShadow, uiLive, measureCtx, glyphTop, textProfile, segAt, LAND, platCache, TEXTY, surfaceOf, platforms, drag, BLIP, CROWD_COLORS, PiixCrowdElement, FIGURES, defineFigure, mixHex, figurePalette, bakeFigure, HEAD, PiixSpriteElement, RENDERS, lum, BAYER, ASCII, TEXTURES, BIG, PiixTypeElement, CELL_SHAPES, VOX_LOOKS, VOX_DIRS, voxKey, voxNorm, voxArt, voxModel, VOX_MODELS, voxFromArt, voxCells, voxDraw, VOX_BUF, voxBuf, VOX_BAYER, VOX_RAMP, voxPaint, VoxStage, PiixPalElement, define, ELEMENTS, add, autoAttach, SCRIPT, start };
+Piixpal._k = { reduceMQ, reduced, clamp, rnd, chance, pick, lerp, now, hexRGBA, ptr, ptrDist, scroll, subs, raf, frame, sub, unsub, rectOf, docW, boxOf, pin, areaOf, onScreen, surfaceAt, LAYER_CSS, layer, origin, getLayer, layerOrigin, SPRITES, bake, defineSprite, baked, ACTORS, shout, Actor, recruit, BEHAVIORS, defineBehavior, Piixpal, art, lastT, layerRoot, ICON_PAL, ICONS, DIGITS, numberIcon, iconCache, iconPal, bakeIcon, UI_INK, UI_PAPER, UI_FONT, UI_MONO, UI_CSS, uiHost, uiRoot, uiStyles, uiStyle, uiEl, uiIcon, uiCard, uiPlace, uiAt, uiClose, uiAnnounce, uiShadow, uiLive, measureCtx, glyphTop, textProfile, segAt, LAND, platCache, TEXTY, surfaceOf, platforms, drag, BLIP, CROWD_COLORS, PiixCrowdElement, GL, GL_PALETTES, glPalette, GL_VERT, GL_PRELUDE, GL_MAIN, glInit, glProgram, glReady, glDraw, GLStage, GL_FRAME, GL_LOOK_HEAD, GL_LOOKS, glLook, GL_LOOK_TEXT, glLookHost, glRGB, KIT_U, kitCorners, KIT_TONES, kitTone, KIT_FONT, kitCss, kitPal, kitClip, FIGURES, defineFigure, mixHex, figurePalette, bakeFigure, HEAD, PiixSpriteElement, RENDERS, lum, BAYER, ASCII, TEXTURES, BIG, PiixTypeElement, CELL_SHAPES, VOX_LOOKS, VOX_DIRS, voxKey, voxNorm, voxArt, voxModel, VOX_MODELS, voxFromArt, voxCells, voxDraw, VOX_BUF, voxBuf, VOX_BAYER, VOX_RAMP, voxPaint, VoxStage, PiixPalElement, define, ELEMENTS, add, autoAttach, SCRIPT, start };
 return Piixpal._k;
 })();
-const { reduceMQ, reduced, clamp, rnd, chance, pick, lerp, now, hexRGBA, ptr, ptrDist, scroll, subs, raf, frame, sub, unsub, rectOf, docW, boxOf, pin, areaOf, onScreen, surfaceAt, LAYER_CSS, layer, origin, getLayer, layerOrigin, SPRITES, bake, defineSprite, baked, ACTORS, shout, Actor, recruit, BEHAVIORS, defineBehavior, Piixpal, art, lastT, layerRoot, ICON_PAL, ICONS, DIGITS, numberIcon, iconCache, iconPal, bakeIcon, UI_INK, UI_PAPER, UI_FONT, UI_MONO, UI_CSS, uiHost, uiRoot, uiStyles, uiStyle, uiEl, uiIcon, uiCard, uiPlace, uiAt, uiClose, uiAnnounce, uiShadow, uiLive, measureCtx, glyphTop, textProfile, segAt, LAND, platCache, TEXTY, surfaceOf, platforms, drag, BLIP, CROWD_COLORS, PiixCrowdElement, FIGURES, defineFigure, mixHex, figurePalette, bakeFigure, HEAD, PiixSpriteElement, RENDERS, lum, BAYER, ASCII, TEXTURES, BIG, PiixTypeElement, CELL_SHAPES, VOX_LOOKS, VOX_DIRS, voxKey, voxNorm, voxArt, voxModel, VOX_MODELS, voxFromArt, voxCells, voxDraw, VOX_BUF, voxBuf, VOX_BAYER, VOX_RAMP, voxPaint, VoxStage, PiixPalElement, define, ELEMENTS, add, autoAttach, SCRIPT, start } = K;
+const { reduceMQ, reduced, clamp, rnd, chance, pick, lerp, now, hexRGBA, ptr, ptrDist, scroll, subs, raf, frame, sub, unsub, rectOf, docW, boxOf, pin, areaOf, onScreen, surfaceAt, LAYER_CSS, layer, origin, getLayer, layerOrigin, SPRITES, bake, defineSprite, baked, ACTORS, shout, Actor, recruit, BEHAVIORS, defineBehavior, Piixpal, art, lastT, layerRoot, ICON_PAL, ICONS, DIGITS, numberIcon, iconCache, iconPal, bakeIcon, UI_INK, UI_PAPER, UI_FONT, UI_MONO, UI_CSS, uiHost, uiRoot, uiStyles, uiStyle, uiEl, uiIcon, uiCard, uiPlace, uiAt, uiClose, uiAnnounce, uiShadow, uiLive, measureCtx, glyphTop, textProfile, segAt, LAND, platCache, TEXTY, surfaceOf, platforms, drag, BLIP, CROWD_COLORS, PiixCrowdElement, GL, GL_PALETTES, glPalette, GL_VERT, GL_PRELUDE, GL_MAIN, glInit, glProgram, glReady, glDraw, GLStage, GL_FRAME, GL_LOOK_HEAD, GL_LOOKS, glLook, GL_LOOK_TEXT, glLookHost, glRGB, KIT_U, kitCorners, KIT_TONES, kitTone, KIT_FONT, kitCss, kitPal, kitClip, FIGURES, defineFigure, mixHex, figurePalette, bakeFigure, HEAD, PiixSpriteElement, RENDERS, lum, BAYER, ASCII, TEXTURES, BIG, PiixTypeElement, CELL_SHAPES, VOX_LOOKS, VOX_DIRS, voxKey, voxNorm, voxArt, voxModel, VOX_MODELS, voxFromArt, voxCells, voxDraw, VOX_BUF, voxBuf, VOX_BAYER, VOX_RAMP, voxPaint, VoxStage, PiixPalElement, define, ELEMENTS, add, autoAttach, SCRIPT, start } = K;
 
 /* ---- behaviors/beeline.js ---- */
 /* beeline: a little line of worker bees buzzing round their element. Come close and
@@ -10953,6 +11298,2132 @@ class PiixVoxelElement extends VoxStage {
 }
 define('piix-voxel', PiixVoxelElement);
 ELEMENTS.voxel = 'piix-voxel';
+
+/* ---- kit/button.js ---- */
+/* BUTTON: a chunky pixel button that presses down into its shadow.   @component button
+ *
+ *   <piix-button tone="lime">Get started</piix-button>
+ *   <piix-button tone="coral" pal="bitbug">Deploy</piix-button>
+ *
+ * Stepped pixel corners, an ink frame and a hard shadow it sinks into when pressed. Hover sends
+ * a puff of pixels off its corners. Give it a pal and a little character sits on its top edge,
+ * looks round when you hover, and hops when you click. It is a real button: it focuses, works
+ * with the keyboard, and submits or resets the form it's in.
+ *
+ *   tone      lime | coral | violet | sky | sun | mint | ink | paper     default: lime
+ *   size      sm | md | lg                                              default: md
+ *   pal       a pal to sit on top (bitbug, pip, frog…)
+ *   type      button | submit | reset                                   default: button
+ *   disabled  greyed out, can't be pressed */
+class PiixButtonElement extends HTMLElement {
+  static get observedAttributes() { return ['tone', 'size', 'pal', 'disabled']; }
+  static get formAssociated() { return true; }
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open', delegatesFocus: true });
+    this._int = this.attachInternals ? this.attachInternals() : null;
+    this._tick = this._tick.bind(this);
+  }
+  connectedCallback() { this._build(); }
+  disconnectedCallback() { unsub(this._tick); }
+  attributeChangedCallback() { if (this.shadowRoot.firstChild) this._build(); }
+  _build() {
+    const [bg, fg] = kitTone(this), size = { sm: [12, '7px 12px'], lg: [18, '14px 24px'] }[this.getAttribute('size')] || [14, '10px 18px'];
+    const off = this.hasAttribute('disabled');
+    this.shadowRoot.innerHTML = `<style>${kitCss()}
+button{all:unset;display:block;cursor:${off ? 'not-allowed' : 'pointer'};border-radius:2px}
+button:focus-visible .frame{outline:3px dashed ${bg};outline-offset:3px}
+.face{padding:${size[1]};background:${bg};color:${fg};font-size:${size[0]}px;letter-spacing:.04em;text-transform:uppercase;box-shadow:inset 0 -${KIT_U}px 0 rgba(0,0,0,.18),inset 0 ${KIT_U}px 0 rgba(255,255,255,.35)}
+button:hover .drop{transform:translateY(-1px)}
+button:active .drop,:host([pressed]) .drop{transform:translateY(${KIT_U}px);filter:drop-shadow(0 0 0 var(--ink))}
+:host([disabled]) .drop{opacity:.45;filter:none}
+.pal{position:absolute;right:14px;bottom:100%;margin-bottom:-${KIT_U}px;image-rendering:pixelated;pointer-events:none;transition:transform .15s}
+.puff{position:absolute;width:${KIT_U}px;height:${KIT_U}px;background:${bg};pointer-events:none;animation:puff .5s steps(5) forwards}
+@keyframes puff{to{transform:translate(var(--dx),var(--dy));opacity:0}}
+</style><button part="button" type="button"${off ? ' disabled' : ''}><span class="drop"><span class="frame"><span class="face" part="face"><slot></slot></span></span></span></button>${this.getAttribute('pal') ? '<canvas class="pal" aria-hidden="true"></canvas>' : ''}`;
+    const b = this.shadowRoot.querySelector('button');
+    b.addEventListener('click', () => this._click());
+    b.addEventListener('pointerenter', () => this._puff());
+    this._pal = this.shadowRoot.querySelector('.pal');
+    unsub(this._tick);
+    if (this._pal) { this._t0 = now(); sub(this._tick); }
+  }
+  _click() {
+    if (this.hasAttribute('disabled')) return;
+    this._hop = now();
+    const t = this.getAttribute('type'), form = this._int && this._int.form;
+    if (form && t === 'submit') form.requestSubmit ? form.requestSubmit() : form.submit();
+    if (form && t === 'reset') form.reset();
+  }
+  /* four pixels fly off the corners on hover */
+  _puff() {
+    if (reduced() || this.hasAttribute('disabled')) return;
+    const w = this.shadowRoot.querySelector('.drop');
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([x, y]) => {
+      const p = document.createElement('i'); p.className = 'puff';
+      p.style.left = (x < 0 ? 0 : w.offsetWidth - KIT_U) + 'px'; p.style.top = (y < 0 ? 0 : w.offsetHeight - KIT_U) + 'px';
+      p.style.setProperty('--dx', x * 14 + 'px'); p.style.setProperty('--dy', y * 12 + 'px');
+      w.appendChild(p); setTimeout(() => p.remove(), 520);
+    });
+  }
+  _tick() {
+    const name = this.getAttribute('pal'), e = (now() - this._t0) / 1000, hover = this.matches(':hover'), hopT = (now() - (this._hop || -1e9)) / 1000;
+    if (!kitPal(this._pal, name, kitClip(name, hover ? ['look', 'happy', 'idle'] : ['idle', 'sit', 'rest']), e * 4, 2)) return;
+    this._pal.style.transform = hopT < .4 ? `translateY(${-Math.sin(hopT / .4 * Math.PI) * 14}px)` : '';
+  }
+}
+define('piix-button', PiixButtonElement);
+ELEMENTS.button = 'piix-button';
+
+/* ---- kit/checkbox.js ---- */
+/* CHECKBOX: a pixel checkbox whose tick is drawn in, pixel by pixel.   @component checkbox
+ *
+ *   <piix-checkbox checked>Send me updates</piix-checkbox>
+ *
+ * A chunky pixel box. Tick it and the check mark draws itself in, block by block, with a puff
+ * of pixels; untick and it un-draws. A real checkbox: it focuses, Space ticks it, screen readers
+ * hear it, and it sends its value with the form it's in.
+ *
+ *   checked   ticked
+ *   tone      the box colour when ticked                   default: lime
+ *   name      the form field name
+ *   value     sent when ticked                             default: on
+ *   disabled  can't be ticked
+ *
+ *   events: change */
+const CHECK_PX = [[1, 4], [2, 5], [3, 6], [4, 5], [5, 4], [6, 3], [7, 2]];
+class PiixCheckboxElement extends HTMLElement {
+  static get observedAttributes() { return ['checked', 'tone', 'disabled']; }
+  static get formAssociated() { return true; }
+  constructor() { super(); this.attachShadow({ mode: 'open', delegatesFocus: true }); this._int = this.attachInternals ? this.attachInternals() : null; }
+  get checked() { return this.hasAttribute('checked'); }
+  set checked(v) { this.toggleAttribute('checked', !!v); }
+  connectedCallback() { if (!this.shadowRoot.firstChild) this._build(); this._sync(); }
+  attributeChangedCallback(n) { if (!this.shadowRoot.firstChild) return; if (n === 'tone') this._build(); else this._sync(); }
+  _build() {
+    const [on, ink] = kitTone(this), p = 3;
+    this.shadowRoot.innerHTML = `<style>${kitCss()}
+:host{cursor:pointer}:host([disabled]){cursor:not-allowed;opacity:.5}
+.row{display:inline-flex;align-items:center;gap:10px}
+[role=checkbox]{outline:none}
+[role=checkbox]:focus-visible .frame{outline:3px dashed ${on};outline-offset:3px}
+.face{width:${p * 9}px;height:${p * 9}px;background:#fbf8f1;transition:background .12s steps(2)}
+:host([checked]) .face{background:${on}}
+.face b{position:absolute;width:${p}px;height:${p}px;background:${ink === '#ffffff' ? '#ffffff' : '#17121f'};transform:scale(0);transition:transform .06s steps(1)}
+:host([checked]) .face b{transform:scale(1)}
+${CHECK_PX.map(([x, y], i) => `.face b:nth-child(${i + 1}){left:${x * p}px;top:${y * p - p}px;transition-delay:${i * 30}ms}`).join('')}
+.label{font-size:13px;text-transform:uppercase;letter-spacing:.04em}
+:host(:active) .drop{transform:translateY(${KIT_U / 2}px)}
+</style><span class="row"><span role="checkbox" tabindex="0" part="box"><span class="drop"><span class="frame"><span class="face">${'<b></b>'.repeat(CHECK_PX.length)}</span></span></span></span><span class="label"><slot></slot></span></span>`;
+    this._box = this.shadowRoot.querySelector('[role=checkbox]');
+    this.addEventListener('click', this._onClick || (this._onClick = () => this._flip()));
+    this._box.addEventListener('keydown', e => { if (e.key === ' ') { e.preventDefault(); this._flip(); } });
+    const label = this.textContent.trim(); if (label) this._box.setAttribute('aria-label', label);
+    this._sync();
+  }
+  _flip() {
+    if (this.hasAttribute('disabled')) return;
+    this.checked = !this.checked;
+    this.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  _sync() {
+    if (!this._box) return;
+    this._box.setAttribute('aria-checked', String(this.checked));
+    this._box.setAttribute('aria-disabled', String(this.hasAttribute('disabled')));
+    if (this._int) this._int.setFormValue(this.checked ? (this.getAttribute('value') || 'on') : null);
+  }
+}
+define('piix-checkbox', PiixCheckboxElement);
+ELEMENTS.checkbox = 'piix-checkbox';
+
+/* ---- kit/progress.js ---- */
+/* PROGRESS: a segmented pixel progress bar with a pal running along the front.   @component progress
+ *
+ *   <piix-progress value="40"></piix-progress>
+ *
+ * Blocks fill in one segment at a time and a pal runs along the leading edge, keeping pace.
+ * At 100% it stops and cheers. Leave out the value and it's indeterminate: the pal paces back
+ * and forth. Screen readers hear it as a progress bar.
+ *
+ *   value     how far, 0 to max (leave out for "working…")
+ *   max       the end                                    default: 100
+ *   pal       who runs (pix, bitbug, penguin…)           default: pix
+ *   tone      the fill colour                            default: lime
+ *   segments  how many blocks                            default: 20
+ *   label     what's loading, for screen readers         default: Loading */
+class PiixProgressElement extends HTMLElement {
+  static get observedAttributes() { return ['value', 'max', 'tone', 'pal', 'segments', 'label']; }
+  constructor() { super(); this.attachShadow({ mode: 'open' }); this._tick = this._tick.bind(this); this._shown = 0; }
+  get value() { return +this.getAttribute('value'); }
+  set value(v) { this.setAttribute('value', v); }
+  connectedCallback() { this._build(); sub(this._tick); }
+  disconnectedCallback() { unsub(this._tick); }
+  attributeChangedCallback(n) { if (!this.shadowRoot.firstChild) return; if (n === 'value' || n === 'max' || n === 'label') this._aria(); else this._build(); }
+  _build() {
+    const [on] = kitTone(this), n = Math.max(4, +this.getAttribute('segments') || 20);
+    this.shadowRoot.innerHTML = `<style>${kitCss()}
+:host{display:block;padding-top:34px;max-width:100%}
+.face{height:22px;background:#2b2436;display:grid;grid-template-columns:repeat(${n},1fr);gap:${KIT_U / 2}px;padding:${KIT_U}px}
+.face i{background:rgba(255,255,255,.07)}
+.face i.on{background:${on};box-shadow:inset 0 -${KIT_U / 2}px 0 rgba(0,0,0,.2)}
+canvas{position:absolute;top:0;image-rendering:pixelated;pointer-events:none}
+</style><div class="drop" role="progressbar" part="bar"><div class="frame"><div class="face">${'<i></i>'.repeat(n)}</div></div></div><canvas aria-hidden="true"></canvas>`;
+    this._bar = this.shadowRoot.querySelector('[role=progressbar]');
+    this._cells = [...this.shadowRoot.querySelectorAll('.face i')];
+    this._cv = this.shadowRoot.querySelector('canvas');
+    this._aria();
+  }
+  _aria() {
+    if (!this._bar) return;
+    const has = this.hasAttribute('value'), max = +this.getAttribute('max') || 100;
+    this._bar.setAttribute('aria-label', this.getAttribute('label') || 'Loading');
+    this._bar.setAttribute('aria-valuemin', '0'); this._bar.setAttribute('aria-valuemax', String(max));
+    if (has) this._bar.setAttribute('aria-valuenow', String(clamp(this.value, 0, max))); else this._bar.removeAttribute('aria-valuenow');
+  }
+  _tick(dt) {
+    if (!this._cv) return;
+    const has = this.hasAttribute('value'), max = +this.getAttribute('max') || 100, k = has ? clamp(this.value / max, 0, 1) : null;
+    this._t = (this._t || 0) + dt;
+    /* the fill eases toward the value, so jumps animate */
+    const want = has ? k : .5 + .5 * Math.sin(this._t * 1.4);
+    this._shown += (want - this._shown) * Math.min(1, reduced() ? 1 : dt * 6);
+    const n = this._cells.length, lit = has ? Math.round(this._shown * n) : -1;
+    this._cells.forEach((c, i) => c.classList.toggle('on', has ? i < lit : Math.abs(i / n - this._shown) < .12));
+    const name = this.getAttribute('pal') || 'pix', sp = SPRITES[name]; if (!sp) return;
+    const s = 2, w = sp.w * s, bw = this._bar.offsetWidth, x = clamp(this._shown * (bw - KIT_U * 4) + KIT_U * 2 - w / 2, 0, bw - w);
+    const done = has && k >= 1 && this._shown > .995, moving = Math.abs(want - this._shown) > .002 || !has;
+    kitPal(this._cv, name, kitClip(name, done ? ['happy', 'jump', 'idle'] : moving ? ['run', 'walk'] : ['idle']), this._t * (moving ? 12 : 4), s);
+    this._cv.style.left = x + 'px';
+    this._cv.style.top = (34 - sp.h * s + KIT_U) + 'px';
+    const back = !has && Math.cos(this._t * 1.4) < 0;
+    this._cv.style.transform = back ? 'scaleX(-1)' : '';
+  }
+}
+define('piix-progress', PiixProgressElement);
+ELEMENTS.progress = 'piix-progress';
+
+/* ---- kit/toggle.js ---- */
+/* TOGGLE: a pixel switch, and a pal walks across to flip it.   @component toggle
+ *
+ *   <piix-toggle checked>Dark mode</piix-toggle>
+ *
+ * The knob is a pal standing in the track. Switch it and the pal walks to the other end, turns,
+ * and the track lights up behind it. It's a real switch: it focuses, Space and Enter flip it,
+ * screen readers hear on and off, and it sends its value with the form it's in.
+ *
+ *   checked   on
+ *   pal       who flips it (bitbug, pinch, penguin…)       default: bitbug
+ *   tone      the colour when on                          default: lime
+ *   name      the form field name
+ *   value     sent when on                                default: on
+ *   disabled  can't be flipped
+ *
+ *   events: change, piix:toggle { checked } */
+const TOGGLE_W = 64;
+class PiixToggleElement extends HTMLElement {
+  static get observedAttributes() { return ['checked', 'tone', 'pal', 'disabled']; }
+  static get formAssociated() { return true; }
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open', delegatesFocus: true });
+    this._int = this.attachInternals ? this.attachInternals() : null;
+    this._tick = this._tick.bind(this);
+    this._x = null;
+  }
+  get checked() { return this.hasAttribute('checked'); }
+  set checked(v) { this.toggleAttribute('checked', !!v); }
+  connectedCallback() { if (!this.shadowRoot.firstChild) this._build(); this._sync(); sub(this._tick); }
+  disconnectedCallback() { unsub(this._tick); }
+  attributeChangedCallback(n) { if (!this.shadowRoot.firstChild) return; if (n === 'checked' || n === 'disabled') this._sync(); else this._build(); }
+  _build() {
+    const [on] = kitTone(this);
+    this.shadowRoot.innerHTML = `<style>${kitCss()}
+:host{cursor:pointer}:host([disabled]){cursor:not-allowed;opacity:.5}
+.row{display:inline-flex;align-items:center;gap:12px}
+[role=switch]{outline:none}
+[role=switch]:focus-visible .frame{outline:3px dashed ${on};outline-offset:3px}
+.face{width:${TOGGLE_W}px;height:26px;background:#3b3448;transition:background .2s steps(3)}
+:host([checked]) .face{background:${on}}
+.dots{position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.25) 1px,transparent 1.5px);background-size:${KIT_U * 2}px ${KIT_U * 2}px}
+canvas{position:absolute;bottom:${KIT_U + 2}px;left:0;image-rendering:pixelated;pointer-events:none}
+.label{font-size:13px;text-transform:uppercase;letter-spacing:.04em}
+</style><span class="row"><span role="switch" tabindex="0" part="switch"><span class="drop"><span class="frame"><span class="face"><i class="dots"></i></span></span></span></span><span class="label"><slot></slot></span></span><canvas aria-hidden="true"></canvas>`;
+    this._sw = this.shadowRoot.querySelector('[role=switch]');
+    this._cv = this.shadowRoot.querySelector('canvas');
+    this.addEventListener('click', this._onClick || (this._onClick = () => this._flip()));
+    this._sw.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); this._flip(); } });
+    const label = this.textContent.trim();
+    if (label) this._sw.setAttribute('aria-label', label);
+    this._sync();
+  }
+  _flip() {
+    if (this.hasAttribute('disabled')) return;
+    this.checked = !this.checked;
+    this.dispatchEvent(new Event('change', { bubbles: true }));
+    this.dispatchEvent(new CustomEvent('piix:toggle', { bubbles: true, detail: { checked: this.checked } }));
+  }
+  _sync() {
+    if (!this._sw) return;
+    this._sw.setAttribute('aria-checked', String(this.checked));
+    this._sw.setAttribute('aria-disabled', String(this.hasAttribute('disabled')));
+    if (this._int) this._int.setFormValue(this.checked ? (this.getAttribute('value') || 'on') : null);
+  }
+  /* the pal walks to its end of the track */
+  _tick(dt) {
+    const name = this.getAttribute('pal') || 'bitbug', sp = SPRITES[name];
+    if (!sp || !this._cv) return;
+    const s = 2, w = sp.w * s, sw = this._sw.getBoundingClientRect(), host = this.getBoundingClientRect();
+    const x0 = sw.left - host.left + KIT_U + 2, x1 = sw.left - host.left + TOGGLE_W + KIT_U * 2 - w - 2, want = this.checked ? x1 : x0;
+    if (this._x == null) this._x = want;
+    const step = reduced() ? Infinity : 70 * dt, d = want - this._x, moving = Math.abs(d) > .5;
+    this._x += Math.sign(d) * Math.min(Math.abs(d), step);
+    this._t = (this._t || 0) + dt;
+    kitPal(this._cv, name, kitClip(name, moving ? ['walk', 'run', 'slide'] : ['idle', 'sit']), this._t * (moving ? 10 : 3), s);
+    this._cv.style.left = this._x + 'px';
+    this._cv.style.transform = (moving ? d < 0 : !this.checked) ? 'scaleX(-1)' : '';
+  }
+}
+define('piix-toggle', PiixToggleElement);
+ELEMENTS.toggle = 'piix-toggle';
+
+/* ---- gl/chart.js ---- */
+/* CHART: small dithered charts, drawn on the GPU.   @component chart
+ *
+ *   <piix-chart values="12,18,9,24,30,28,35" labels="Mon,Tue,Wed,Thu,Fri,Sat,Sun"></piix-chart>
+ *   <piix-chart kind="bars" values="4,7,5,9,12" palette="sunset"></piix-chart>
+ *
+ * An area chart's fill fades out in a dither instead of a gradient, the line sits on top in the
+ * brightest colour, and bars are stepped columns shaded from the top. It sweeps in from the left
+ * the first time it's on screen. Hover it and a crosshair snaps to the nearest point and shows
+ * its label and value. Screen readers get the numbers as a table.
+ *
+ *   values    the numbers, comma separated (up to 256)
+ *   labels    a label for each, comma separated
+ *   kind      area | line | bars                            default: area
+ *   suffix    after each value, like % or ms
+ *   min       where the axis starts                         default: 0 (or the lowest value, if below 0)
+ *   palette   its colours                                   default: lime
+ *   height    px or any CSS length                          default: 220px
+ *   pixel     size of one pixel, px                         default: 3 */
+const CH_SHADER = `vec4 effect(vec2 uv,vec2 cell){
+  float n=u_k.x,g=u_k.y,hov=u_k.z,kind=u_k.w,pad=6./u_res.y;
+  float y=(uv.y-pad)/(1.-pad*2.),grow=clamp(g*1.7-uv.x*.7,0.,1.);
+  grow=1.-pow(1.-grow,3.);
+  vec4 c=vec4(0.);
+  for(int k=1;k<4;k++){if(abs(y-float(k)*.25)*u_res.y<.6&&mod(cell.x,4.)<1.)c=vec4(dpal(.18,cell),1.);}
+  if(kind>1.5){
+    float i=floor(uv.x*n),fx=fract(uv.x*n),v=texture2D(u_tex,vec2((i+.5)/n,.5)).r*grow;
+    float gap=clamp(1.5/(u_res.x/n),.08,.3);
+    if(fx>gap&&fx<1.-gap&&y<v&&y>0.){float top=(v-y)*u_res.y;
+      float lit=i==hov?1.:.0;
+      c=vec4(dpal(top<2.?1.:mix(.75,.35,clamp((v-y)/max(v,.01),0.,1.))+lit*.2,cell),1.);}
+  }else{
+    float tx=(uv.x*(n-1.)+.5)/n,v=texture2D(u_tex,vec2(tx,.5)).r*grow;
+    float e=1./u_res.x,v1=texture2D(u_tex,vec2(((uv.x+e)*(n-1.)+.5)/n,.5)).r*grow;
+    float slope=abs(v1-v)*u_res.y,th=(1.1+slope*.5)/u_res.y;
+    if(kind<.5&&y<v&&y>0.){float k=(v-y)/max(v,.01);if(1.-k*1.15>bayer8(cell))c=vec4(dpal(.25+.45*(1.-k),cell),1.);}
+    if(abs(y-v)<th*1.)c=vec4(dpal(1.,cell),1.);
+    if(hov>=0.){float hxp=hov/(n-1.),hv=texture2D(u_tex,vec2((hov+.5)/n,.5)).r*grow;
+      if(abs(uv.x-hxp)*u_res.x<.6&&mod(cell.y,3.)<1.&&y>0.)c=vec4(dpal(.6,cell),1.);
+      vec2 dp=vec2((uv.x-hxp)*u_res.x,(y-hv)*u_res.y*(1.-pad*2.));
+      if(max(abs(dp.x),abs(dp.y))<2.5)c=vec4(dpal(1.,cell),1.);
+      if(max(abs(dp.x),abs(dp.y))<1.5)c=vec4(dpal(0.,cell),1.);}
+  }
+  if(y<=0.&&y>-1./u_res.y)c=vec4(dpal(.4,cell),1.);
+  return c;}`;
+class PiixChartElement extends GLStage {
+  static get observedAttributes() { return [...GLStage.observedAttributes, 'values', 'labels', 'suffix', 'min']; }
+  constructor() { super(); this._defPx = 3; this._defPal = 'lime'; this._hi = -1; this._tex = { owner: {}, src: null, dirty: true }; }
+  attributeChangedCallback(n, a, b) { if (n === 'values' || n === 'labels' || n === 'suffix' || n === 'min') { if (this._cv) this._data(); return; } super.attributeChangedCallback(n, a, b); }
+  get kind() { return { line: 1, bars: 2 }[this.getAttribute('kind')] || 0; }
+  _hostCss() { return 'width:100%;' + (this.getAttribute('height') ? '' : 'height:220px;'); }
+  _css() {
+    const l = this._pal.list;
+    return `.tip{position:absolute;z-index:2;padding:6px 9px 7px;background:${l[l.length - 1]};color:${l[0]};font:600 12.5px/1.2 "Bricolage Grotesque",system-ui,sans-serif;clip-path:${kitCorners(2)};transform:translate(-50%,-100%);pointer-events:none;white-space:nowrap;opacity:0;transition:opacity .12s}
+.tip small{display:block;font:400 10px/1 ${KIT_FONT};text-transform:uppercase;opacity:.7;margin-bottom:3px}
+.ax{position:absolute;right:0;font:400 10px/1 ${KIT_FONT};opacity:.5;pointer-events:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}`;
+  }
+  _html() { return '<canvas aria-hidden="true"></canvas><span class="ax" style="top:0"></span><span class="tip" aria-hidden="true"></span><table class="sr"></table>'; }
+  _setup() {
+    this.setAttribute('role', 'figure');
+    this._data();
+    this.addEventListener('pointermove', e => {
+      const r = this.getBoundingClientRect(), x = clamp((e.clientX - r.left) / r.width, 0, 1), n = this._vals.length;
+      this._hi = !n ? -1 : this.kind === 2 ? Math.min(n - 1, Math.floor(x * n)) : Math.round(x * (n - 1));
+      this._tipAt();
+    });
+    this.addEventListener('pointerleave', () => { this._hi = -1; this.shadowRoot.querySelector('.tip').style.opacity = 0; });
+  }
+  /* read the numbers into a one-row texture the shader samples */
+  _data() {
+    const vals = (this.getAttribute('values') || '').split(',').map(Number).filter(v => !isNaN(v)).slice(0, 256);
+    const labs = (this.getAttribute('labels') || '').split(',').map(s => s.trim());
+    this._vals = vals.length ? vals : [0, 0]; this._labs = labs;
+    const lo = this._lo = this.hasAttribute('min') ? +this.getAttribute('min') : Math.min(0, ...this._vals), max = this._max = Math.max(...this._vals, lo + 1), n = this._vals.length;
+    const c = this._tex.src || (this._tex.src = document.createElement('canvas'));
+    c.width = n; c.height = 1;
+    const g = c.getContext('2d'), d = g.createImageData(n, 1);
+    this._vals.forEach((v, i) => { const k = Math.round(clamp((v - lo) / (max - lo), 0, 1) * 255); d.data.set([k, k, k, 255], i * 4); });
+    g.putImageData(d, 0, 0);
+    this._tex.dirty = true;
+    const sfx = this.getAttribute('suffix') || '';
+    this.shadowRoot.querySelector('.ax').textContent = (+max.toFixed(2)) + sfx;
+    this.shadowRoot.querySelector('.sr').innerHTML = `<tr><th>Label</th><th>Value</th></tr>` + this._vals.map((v, i) => `<tr><td>${(labs[i] || i + 1).toString().replace(/[<>&]/g, '')}</td><td>${v}${sfx.replace(/[<>&]/g, '')}</td></tr>`).join('');
+    this.setAttribute('aria-label', `Chart of ${n} values, from ${Math.min(...this._vals)} to ${max}`);
+  }
+  _tipAt() {
+    const tip = this.shadowRoot.querySelector('.tip'), i = this._hi, n = this._vals.length;
+    if (i < 0) { tip.style.opacity = 0; return; }
+    const r = this.getBoundingClientRect(), x = this.kind === 2 ? (i + .5) / n : i / Math.max(1, n - 1), pad = 6 * this._px / (r.height * Math.min(devicePixelRatio || 1, 2));
+    const y = 1 - (pad + (1 - pad * 2) * (this._vals[i] - this._lo) / (this._max - this._lo));
+    tip.innerHTML = `${this._labs[i] ? `<small>${this._labs[i].replace(/[<>&]/g, '')}</small>` : ''}${this._vals[i]}${(this.getAttribute('suffix') || '').replace(/[<>&]/g, '')}`;
+    tip.style.left = clamp(x * r.width, 30, r.width - 30) + 'px'; tip.style.top = Math.max(26, y * r.height - 10) + 'px'; tip.style.opacity = 1;
+  }
+  _texture() { const t = this._tex; const out = { owner: t.owner, src: t.src, dirty: t.dirty }; t.dirty = false; return out; }
+  _shader() { return CH_SHADER; }
+  _uniforms() {
+    const g = reduced() ? 1 : clamp((now() - (this._seen || now())) / 1100, 0, 1);
+    return { u_k: [this._vals.length, g, this._hi, this.kind] };
+  }
+}
+define('piix-chart', PiixChartElement);
+ELEMENTS.chart = 'piix-chart';
+
+/* ---- gl/cursor.js ---- */
+/* CURSOR: a pixel trail, or a glow, that follows the pointer across the whole page.   @component cursor
+ *
+ *   <piix-cursor></piix-cursor>
+ *   <piix-cursor kind="glow" palette="candy"></piix-cursor>
+ *
+ * One tag anywhere on the page. "trail" leaves a comet of dithered pixels behind the pointer
+ * that fade as they fall away; "glow" is a soft pixel halo round it. It never gets in the way
+ * of clicks, rests the GPU when the pointer is still, and stays off on touch screens and for
+ * people who prefer less motion.
+ *
+ *   kind      trail | glow                                default: trail
+ *   palette   its colours                                 default: lime
+ *   size      how big, 0.5 to 3                           default: 1
+ *   pixel     size of one pixel, px                       default: 4 */
+const CR_N = 40;
+const CR_SHADER = `uniform vec4 u_tr[${CR_N}];
+vec4 effect(vec2 uv,vec2 cell){
+  vec2 q=aspect(uv);float v=0.,sz=u_k.y;
+  if(u_k.x==1.){vec4 p=u_tr[0];if(p.w<=0.)return vec4(0.);float d=length(q-aspect(p.xy));v=p.w*smoothstep(.16*sz,0.,d);}
+  else for(int i=0;i<${CR_N};i++){vec4 p=u_tr[i];if(p.w<=0.)continue;float d=length(q-aspect(p.xy));v=max(v,p.w*smoothstep(.028*sz*(.4+.6*p.w),0.,d));}
+  if(v<.04)return vec4(0.);
+  return vec4(dpal(.35+.65*v,cell),step(bayer8(cell)*.95,v*1.4));}`;
+class PiixCursorElement extends GLStage {
+  constructor() { super(); this._defPx = 4; this._defPal = 'lime'; this._defDither = .6; this._tr = new Float32Array(CR_N * 4); this._pts = []; this._last = [-1, -1]; }
+  _hostCss() { return 'position:fixed;inset:0;z-index:2147483000;pointer-events:none'; }
+  _setup() { this.setAttribute('aria-hidden', 'true'); this._off = !matchMedia('(pointer:fine)').matches; }
+  _skip() {
+    if (this._off || reduced() || !ptr.seen) return true;
+    /* record where the pointer is now; age everything */
+    const t = now(), x = ptr.cx / innerWidth, y = 1 - ptr.cy / innerHeight;
+    const gap = Math.hypot(x - this._last[0], y - this._last[1]);
+    if (gap > .002) {
+      /* a fast flick leaves gaps: fill them in so the trail stays one line */
+      const n = this._last[0] < 0 ? 1 : Math.min(6, Math.ceil(gap / .012));
+      for (let k = n; k >= 1; k--) this._pts.unshift([lerp(this._last[0], x, k / n), lerp(this._last[1], y, k / n), t - (n - k) * 4]);
+      this._last = [x, y];
+    }
+    const life = this.getAttribute('kind') === 'glow' ? 1600 : 520;
+    this._pts = this._pts.filter(p => t - p[2] < life).slice(0, CR_N);
+    if (this.getAttribute('kind') === 'glow' && !this._pts.length && x >= 0) this._pts = [[x, y, t - life * .5]];
+    return !this._pts.length;
+  }
+  _shader() { return CR_SHADER; }
+  _uniforms() {
+    const t = now(), life = this.getAttribute('kind') === 'glow' ? 1600 : 520;
+    this._tr.fill(0);
+    this._pts.forEach((p, i) => { this._tr[i * 4] = p[0]; this._tr[i * 4 + 1] = p[1]; this._tr[i * 4 + 3] = 1 - (t - p[2]) / life; });
+    if (this.getAttribute('kind') === 'glow' && this._tr[3] > 0) { this._tr[0] = ptr.cx / innerWidth; this._tr[1] = 1 - ptr.cy / innerHeight; this._tr[3] = Math.max(.6, this._tr[3]); }
+    return { u_tr: this._tr, u_k: [this.getAttribute('kind') === 'glow' ? 1 : 0, clamp(+this.getAttribute('size') || 1, .5, 3), 0, 0] };
+  }
+}
+define('piix-cursor', PiixCursorElement);
+ELEMENTS.cursor = 'piix-cursor';
+
+/* ---- gl/dialog.js ---- */
+/* DIALOG: a modal that dissolves in, pixel by pixel, in any look.   @component dialog
+ *
+ *   <piix-glow-button data-piix-open="hello">Open</piix-glow-button>
+ *   <piix-dialog id="hello">
+ *     <h2>Ship it?</h2>
+ *     <p>This will deploy to production.</p>
+ *     <piix-glow-button data-close>Deploy</piix-glow-button>
+ *   </piix-dialog>
+ *
+ * A real modal (the browser's own <dialog>): it traps focus, Escape closes it, and focus goes
+ * back where it came from. The panel is drawn on the GPU and dissolves in when it opens, over
+ * a dithered backdrop. Anything with data-piix-open="its id" opens it; anything inside with
+ * data-close closes it; so does clicking the backdrop.
+ *
+ *   open      open it (or call .show() / .close())
+ *   look      glow | chrome | glass | riso | crt              default: glow
+ *   palette   the colours of the light                    default: violet (or the look's own)
+ *   pixel     size of one pixel, px                       default: 3
+ *   width     any CSS length                              default: 520px
+ *
+ *   events: open, close */
+/* a 2 x 2 checker for the backdrop: it dims the page in pixels, not a flat sheet */
+let DLG_DITHER = '';
+const dlgDither = () => {
+  if (DLG_DITHER) return DLG_DITHER;
+  const c = document.createElement('canvas'); c.width = c.height = 2;
+  const g = c.getContext('2d'); g.fillStyle = 'rgba(6,4,12,.62)'; g.fillRect(0, 0, 1, 1); g.fillRect(1, 1, 1, 1);
+  return (DLG_DITHER = c.toDataURL());
+};
+/* focus an element, or the real control inside a Pixel UI one */
+const dlgFocus = el => { const inner = el.shadowRoot && el.shadowRoot.querySelector('button,input,[tabindex]'); (inner || el).focus(); };
+class PiixDialogElement extends GLStage {
+  static get observedAttributes() { return [...GLStage.observedAttributes, 'open', 'width']; }
+  get _defPal() { const l = glLook(this); return l === 'glow' ? 'violet' : GL_LOOKS[l][0]; }
+  constructor() { super(); this._defPx = 3; this._introLen = .4; this._click = [.5, .5, -9]; this._open = false; }
+  connectedCallback() {
+    super.connectedCallback();
+    /* anything on the page with data-piix-open="my id" opens me */
+    document.addEventListener('click', this._opener = e => {
+      const t = e.target.closest && e.target.closest('[data-piix-open]');
+      if (t && this.id && t.getAttribute('data-piix-open') === this.id) { this._from = t; this.show(); }
+    });
+    if (this.hasAttribute('open')) requestAnimationFrame(() => this.show());
+  }
+  disconnectedCallback() { super.disconnectedCallback(); document.removeEventListener('click', this._opener); }
+  attributeChangedCallback(n, a, b) {
+    if (n === 'open') { if (this._dlg) b === null ? this.close() : this.show(); return; }
+    super.attributeChangedCallback(n, a, b);
+  }
+  _hostCss() { return 'display:contents'; }
+  _css() {
+    const l = glLook(this), txt = l === 'glow' ? 'color:#f2eef8' : GL_LOOK_TEXT[l](this._pal.list);
+    return `dialog{position:fixed;inset:0;margin:auto;padding:0;border:0;background:transparent;color:inherit;width:min(${this.getAttribute('width') || '520px'},calc(100vw - 32px));max-height:calc(100vh - 48px);overflow:visible;${glLookHost(l)}}
+dialog::backdrop{background:url(${dlgDither()}) 0 0/4px 4px;image-rendering:pixelated;animation:piixbd .24s steps(3)}
+dialog[open]{animation:piixpop .22s steps(3)}
+@keyframes piixbd{from{opacity:0}}
+@keyframes piixpop{from{transform:translateY(10px) scale(.96)}}
+.in{position:relative;padding:34px 30px 28px;max-height:calc(100vh - 48px);overflow:auto;box-sizing:border-box;font:400 16px/1.5 "Bricolage Grotesque",system-ui,sans-serif;${txt}}
+::slotted(h2),::slotted(h3){margin:0 0 .35em!important;font-size:26px!important;font-weight:800!important;letter-spacing:-.03em;line-height:1.05;color:inherit}
+::slotted(p){margin:0 0 1.1em!important;opacity:.85}
+.x{all:unset;position:absolute;z-index:2;top:12px;right:14px;width:30px;height:30px;display:grid;place-items:center;font:400 14px/1 ${KIT_FONT};color:inherit;cursor:pointer;opacity:.7}
+.x:hover{opacity:1}
+.x:focus-visible{outline:2px dashed currentColor;outline-offset:2px}
+@media (prefers-reduced-motion:reduce){dialog[open],dialog::backdrop{animation:none}}`;
+  }
+  _html() { return '<dialog part="dialog"><canvas aria-hidden="true"></canvas><div class="in" part="content"><slot></slot></div><button class="x" type="button" part="close" aria-label="Close">X</button></dialog>'; }
+  _box() { return this._dlg || this; }
+  _setup() {
+    const d = this._dlg = this.shadowRoot.querySelector('dialog');
+    const h = this.querySelector('h1,h2,h3');
+    if (h) { if (!h.id) h.id = 'piix-dlg-' + Math.random().toString(36).slice(2, 8); d.setAttribute('aria-label', h.textContent.trim()); }
+    d.addEventListener('close', () => {
+      this._open = false; this.removeAttribute('open');
+      if (this._from && this._from.isConnected) dlgFocus(this._from);
+      this._from = null;
+      this.dispatchEvent(new Event('close'));
+    });
+    /* the backdrop is the dialog itself, outside its box */
+    d.addEventListener('click', e => {
+      const r = d.getBoundingClientRect();
+      if (e.target === d && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) this.close();
+    });
+    d.addEventListener('pointerdown', e => { const r = d.getBoundingClientRect(); this._click = [(e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height, now()]; });
+    this.shadowRoot.querySelector('.x').addEventListener('click', () => this.close());
+    this.addEventListener('click', e => { if (e.target.closest('[data-close]')) this.close(); });
+    new ResizeObserver(() => this._fit()).observe(d);
+    if (this._open) { this._open = false; this.show(); }
+  }
+  show() {
+    const d = this._dlg;
+    if (!d || d.open) return;
+    if (!this._from) this._from = document.activeElement;
+    d.showModal();
+    this._open = true; this._seen = now(); this._fit();
+    if (!this.hasAttribute('open')) this.setAttribute('open', '');
+    /* focus the first thing inside you can use, else the close button */
+    const f = this.querySelector('[autofocus],input,select,textarea,button,a[href],[tabindex]:not([tabindex="-1"]),piix-glow-button,piix-button');
+    dlgFocus(f || this.shadowRoot.querySelector('.x'));
+    this.dispatchEvent(new Event('open'));
+  }
+  close() { const d = this._dlg; if (d && d.open) d.close(); }
+  _tick(dt) { if (this._open) this._vis = true; super._tick(dt); }
+  _skip() { return !this._open; }
+  _shader() { return GL_LOOKS[glLook(this)][1]; }
+  _uniforms() { return { u_k: [this._click[0], this._click[1], (now() - this._click[2]) / 1000, 1], u_j: [.03, 0, 0, 0] }; }
+}
+define('piix-dialog', PiixDialogElement);
+ELEMENTS.dialog = 'piix-dialog';
+
+/* ---- gl/divider.js ---- */
+/* DIVIDER: a moving pixel edge between two sections.   @component divider
+ *
+ *   <section style="background:#17121f">…</section>
+ *   <piix-divider from="#17121f" to="#f3eee3" kind="wave"></piix-divider>
+ *   <section style="background:#f3eee3">…</section>
+ *
+ * Instead of a hard line, one section's colour flows into the next across a living pixel edge:
+ * rolling waves, a mountain ridge, stepped stairs, drips, or a dithered fade. A thin line of
+ * light runs along the edge, and it lifts a little under the pointer.
+ *
+ *   kind      wave | mountains | stairs | drip | dissolve      default: wave
+ *   from      the colour above                                default: #17121f
+ *   to        the colour below                                default: #f3eee3
+ *   palette   the line of light along the edge                default: lime
+ *   height    px or any CSS length                            default: 120px
+ *   pixel     size of one pixel, px                           default: 6
+ *   flip      turn it upside down */
+const DV_KINDS = { wave: 0, mountains: 1, stairs: 2, drip: 3, dissolve: 4 };
+const DV_SHADER = `vec4 effect(vec2 uv,vec2 cell){
+  float k=u_j.w,t=u_time;if(u_k.w>0.)uv.y=1.-uv.y;
+  float x=uv.x*u_res.x/u_res.y,y=uv.y,h;
+  if(k==4.){return vec4(y>bayer8(cell)*.9+.05?u_j.rgb:u_k.xyz,1.);}
+  if(k==1.)h=.3+.5*fbm(vec2(x*.8+t*.02,1.3))+.08*abs(sin(x*1.7));
+  else if(k==2.)h=.25+.5*floor((.5+.5*sin(x*.9+t*.35))*5.+.5)/5.;
+  else if(k==3.){float c=floor(cell.x/2.);h=.8-.55*max(0.,sin(t*.5+hash(vec2(c,1.))*6.28))*hash(vec2(c,2.))-.06*sin(x*2.);}
+  else h=.5+.17*sin(x*1.6+t*.7)+.08*sin(x*4.1-t*1.2);
+  h+=u_hover*.14*exp(-pow((uv.x-u_mouse.x)*u_res.x/u_res.y*2.5,2.));
+  float e=(y-h)*u_res.y;
+  if(e>0.&&e<1.6)return vec4(dpal(.85,cell),1.);
+  return vec4(e>0.?u_j.rgb:u_k.xyz,1.);}`;
+class PiixDividerElement extends GLStage {
+  static get observedAttributes() { return [...GLStage.observedAttributes, 'from', 'to', 'flip']; }
+  constructor() { super(); this._defPx = 6; this._defPal = 'lime'; this._defDither = 0; }
+  _hostCss() { return (this.getAttribute('height') ? '' : 'height:120px;') + 'margin:-1px 0'; }
+  _setup() { this.setAttribute('aria-hidden', 'true'); this._from = glRGB(this.getAttribute('from') || '#17121f'); this._to = glRGB(this.getAttribute('to') || '#f3eee3'); }
+  _shader() { return DV_SHADER; }
+  _uniforms() { return { u_j: [...this._from, DV_KINDS[this.getAttribute('kind')] || 0], u_k: [...this._to, this.hasAttribute('flip') ? 1 : 0] }; }
+}
+define('piix-divider', PiixDividerElement);
+ELEMENTS.divider = 'piix-divider';
+
+/* ---- gl/flap.js ---- */
+/* FLAP: a split-flap board, like a station departures sign.   @component flap
+ *
+ *   <piix-flap text="NOW BOARDING"></piix-flap>
+ *   <piix-flap countdown="2026-12-31T00:00:00"></piix-flap>
+ *
+ * Every tile riffles through the alphabet, flap by flap, until it lands on its letter, each a
+ * beat after the one before, with that clatter of little cards. Change the text and it flips
+ * again. With a countdown it shows days, hours, minutes and seconds and keeps ticking.
+ * It sizes from the font size you give it; screen readers just get the words.
+ *
+ *   text      what it says (letters, digits, spaces and : . - / ! ? ' & +)
+ *   length    pad it to this many tiles
+ *   countdown a date and time to count down to
+ *   theme     dark | light | amber                          default: dark */
+const FLAP_SET = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:.-/!?'&+";
+const FLAP_THEMES = { dark: ['#17121f', '#211a2c', '#f4efe2', '#000'], light: ['#f4efe2', '#e7e0d0', '#17121f', '#b8ae9a'], amber: ['#1a1208', '#24190a', '#ffb43a', '#000'] };
+class PiixFlapElement extends HTMLElement {
+  static get observedAttributes() { return ['text', 'length', 'countdown', 'theme']; }
+  constructor() { super(); this.attachShadow({ mode: 'open' }); this._cur = []; }
+  connectedCallback() { this._build(); }
+  disconnectedCallback() { clearInterval(this._cd); this._timers && this._timers.forEach(clearTimeout); }
+  attributeChangedCallback(n) { if (!this.shadowRoot.firstChild) return; if (n === 'theme') this._build(); else this._run(); }
+  _build() {
+    const [bg, bg2, fg, line] = FLAP_THEMES[this.getAttribute('theme')] || FLAP_THEMES.dark;
+    this.shadowRoot.innerHTML = `<style>
+:host{display:inline-block;font-size:clamp(22px,5vw,56px);line-height:1}
+.row{display:flex;gap:.12em;flex-wrap:wrap}
+.g{display:inline-flex;flex-direction:column;align-items:center;gap:.25em}
+.g small{font:400 max(10px,.2em)/1 "Silkscreen",ui-monospace,monospace;letter-spacing:.08em;opacity:.6}
+.gs{display:flex;gap:.08em}
+.sep{align-self:flex-start;padding:.18em .02em 0;font:400 1em/1 "Silkscreen",ui-monospace,monospace;color:${fg};opacity:.6}
+.t{position:relative;width:.78em;height:1.16em;font:400 1em/1.16 "Silkscreen",ui-monospace,monospace;color:${fg};text-align:center;perspective:3em}
+.t span{position:absolute;left:0;right:0;height:50%;overflow:hidden;background:${bg};clip-path:polygon(0 3px,3px 3px,3px 0,calc(100% - 3px) 0,calc(100% - 3px) 3px,100% 3px,100% 100%,0 100%)}
+.t span i{display:block;font-style:normal;height:200%}
+.t .up,.t .fu{top:0}
+.t .dn,.t .fd{bottom:0;background:${bg2};clip-path:polygon(0 0,100% 0,100% calc(100% - 3px),calc(100% - 3px) calc(100% - 3px),calc(100% - 3px) 100%,3px 100%,3px calc(100% - 3px),0 calc(100% - 3px))}
+.t .dn i,.t .fd i{transform:translateY(-50%)}
+.t .fu{transform-origin:50% 100%;z-index:2;backface-visibility:hidden}
+.t .fd{transform-origin:50% 0;z-index:2;transform:rotateX(90deg);backface-visibility:hidden}
+.t.go .fu{animation:fu var(--s) steps(3) forwards}
+.t.go .fd{animation:fd var(--s) steps(3) var(--s) forwards}
+@keyframes fu{to{transform:rotateX(-90deg)}}
+@keyframes fd{to{transform:rotateX(0)}}
+.t::after{content:"";position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;background:${line};z-index:3;opacity:.7}
+</style><div class="row" part="board" aria-hidden="true"></div>`;
+    this._row = this.shadowRoot.querySelector('.row');
+    this._cur = [];
+    this._run();
+  }
+  /* the words to show, as tile groups */
+  _target() {
+    const cd = this.getAttribute('countdown');
+    if (cd) {
+      const ms = Math.max(0, new Date(cd).getTime() - Date.now()), s = Math.floor(ms / 1000);
+      const p = n => String(n).padStart(2, '0');
+      return { groups: [[p(Math.min(99, Math.floor(s / 86400))), 'DAYS'], [p(Math.floor(s / 3600) % 24), 'HRS'], [p(Math.floor(s / 60) % 60), 'MIN'], [p(s % 60), 'SEC']], label: `${Math.floor(s / 86400)} days ${Math.floor(s / 3600) % 24} hours ${Math.floor(s / 60) % 60} minutes left` };
+    }
+    let t = (this.getAttribute('text') || '').toUpperCase().split('').map(c => FLAP_SET.includes(c) ? c : ' ').join('');
+    const n = +this.getAttribute('length') || 0;
+    if (n > t.length) t = t.padEnd(n, ' ');
+    return { groups: [[t, '']], label: this.getAttribute('text') || '' };
+  }
+  _run() {
+    const { groups, label } = this._target(), cd = this.hasAttribute('countdown');
+    this.setAttribute('role', cd ? 'timer' : 'img');
+    this.setAttribute('aria-label', label);
+    const chars = groups.map(g => g[0]).join('');
+    /* rebuild the tiles if the shape changed */
+    if (this._shape !== groups.map(g => g[0].length + g[1]).join('|')) {
+      this._shape = groups.map(g => g[0].length + g[1]).join('|');
+      this._row.innerHTML = groups.map(([s, lab], gi) => `${gi && cd ? '<span class="sep">:</span>' : ''}<span class="g"><span class="gs">${[...s].map(() => '<span class="t"><span class="up"><i> </i></span><span class="dn"><i> </i></span><span class="fu"><i> </i></span><span class="fd"><i> </i></span></span>').join('')}</span>${lab ? `<small>${lab}</small>` : ''}</span>`).join('');
+      this._tiles = [...this._row.querySelectorAll('.t')];
+      this._cur = this._tiles.map(() => ' ');
+    }
+    (this._timers || []).forEach(clearTimeout); this._timers = [];
+    [...chars].forEach((ch, i) => this._flipTo(i, ch, cd ? 0 : i * 70));
+    clearInterval(this._cd);
+    if (cd) this._cd = setInterval(() => this._run(), 1000);
+  }
+  /* step one tile through the set until it reaches ch */
+  _flipTo(i, ch, delay) {
+    const tile = this._tiles[i];
+    if (!tile) return;
+    if (reduced()) { this._paint(tile, ch, ch); this._cur[i] = ch; return; }
+    const step = () => {
+      const cur = this._cur[i];
+      if (cur === ch) return;
+      /* a countdown flips straight to the next digit; words riffle, but never more than a dozen flaps */
+      const ci = FLAP_SET.indexOf(cur), ti = FLAP_SET.indexOf(ch), dist = (ti - ci + FLAP_SET.length) % FLAP_SET.length;
+      const next = this.hasAttribute('countdown') ? ch : FLAP_SET[dist > 12 ? (ti - 12 + FLAP_SET.length) % FLAP_SET.length : (ci + 1) % FLAP_SET.length];
+      const fast = this.hasAttribute('countdown') ? 90 : 46;
+      this._paint(tile, cur, next, fast);
+      this._cur[i] = next;
+      this._timers.push(setTimeout(step, fast * 2));
+    };
+    this._timers.push(setTimeout(step, delay));
+  }
+  /* show one flip from a to b */
+  _paint(tile, a, b, ms = 46) {
+    const [up, dn, fu, fd] = tile.children;
+    up.firstChild.textContent = b; dn.firstChild.textContent = a;
+    fu.firstChild.textContent = a; fd.firstChild.textContent = b;
+    tile.style.setProperty('--s', ms + 'ms');
+    tile.classList.remove('go'); void tile.offsetWidth; tile.classList.add('go');
+    clearTimeout(tile._done);
+    tile._done = setTimeout(() => { dn.firstChild.textContent = b; fu.firstChild.textContent = b; tile.classList.remove('go'); }, ms * 2);
+  }
+}
+define('piix-flap', PiixFlapElement);
+ELEMENTS.flap = 'piix-flap';
+
+/* ---- gl/glowbutton.js ---- */
+/* GLOW BUTTON: a button with light running round its pixel border.   @component glow-button
+ *
+ *   <piix-glow-button>Get started</piix-glow-button>
+ *   <piix-glow-button palette="sunset">Launch</piix-glow-button>
+ *
+ * A band of light chases round the pixel border, drawn on the GPU and dithered into the palette.
+ * Hover and a spotlight follows your pointer across the face; click and a ring ripples out from
+ * where you clicked. It's a real button: it focuses, works with the keyboard, and submits or
+ * resets the form it's in. Give it a look to change its whole style: liquid chrome, frosted
+ * glass, a two-ink riso print or a green terminal.
+ *
+ *   look      glow | chrome | glass | riso | crt              default: glow
+ *   palette   the colours of the light                    default: lime (or the look's own)
+ *   pixel     size of one pixel, px                       default: 3
+ *   type      button | submit | reset                     default: button
+ *   size      sm | md | lg                                default: md
+ *   disabled  greyed out */
+class PiixGlowButtonElement extends GLStage {
+  static get formAssociated() { return true; }
+  static get observedAttributes() { return [...GLStage.observedAttributes, 'size', 'disabled']; }
+  get _defPal() { const l = glLook(this); return l === 'glow' ? 'lime' : GL_LOOKS[l][0]; }
+  constructor() { super(); this._defPx = 3; this._click = [.5, .5, -9]; this._int = this.attachInternals ? this.attachInternals() : null; }
+  _hostCss() { return 'display:inline-block;vertical-align:middle;cursor:pointer;-webkit-tap-highlight-color:transparent;' + glLookHost(glLook(this)); }
+  _css() {
+    const [pad, fs] = { sm: ['11px 18px', 13], lg: ['20px 34px', 18] }[this.getAttribute('size')] || ['16px 26px', 15];
+    return `button{all:unset;position:relative;display:block;box-sizing:border-box;padding:${pad};font:700 ${fs}px/1 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:.01em;${GL_LOOK_TEXT[glLook(this)](this._pal.list)};transition:transform .08s}
+button:focus-visible{outline:2px dashed ${this._pal.list[this._pal.list.length - 2]};outline-offset:4px}
+:host(:active) button{transform:translateY(1px)}
+:host([disabled]){opacity:.45;cursor:not-allowed;filter:grayscale(.7)}`;
+  }
+  _html() { return `<canvas aria-hidden="true"></canvas><button part="button" type="button"${this.hasAttribute('disabled') ? ' disabled' : ''}><slot></slot></button>`; }
+  _setup() {
+    this.shadowRoot.querySelector('button').addEventListener('click', e => {
+      if (this.hasAttribute('disabled')) return;
+      const r = this.getBoundingClientRect();
+      this._click = [(e.clientX - r.left) / r.width || .5, 1 - (e.clientY - r.top) / r.height || .5, now()];
+      const form = this._int && this._int.form, t = this.getAttribute('type');
+      if (form && t === 'submit') form.requestSubmit ? form.requestSubmit() : form.submit();
+      if (form && t === 'reset') form.reset();
+    });
+  }
+  _shader() { return GL_LOOKS[glLook(this)][1]; }
+  _uniforms() { return { u_k: [this._click[0], this._click[1], (now() - this._click[2]) / 1000, 2], u_j: [this._hov * .04, 0, 0, 0] }; }
+}
+define('piix-glow-button', PiixGlowButtonElement);
+ELEMENTS['glow-button'] = 'piix-glow-button';
+
+/* ---- gl/glowcard.js ---- */
+/* GLOW CARD: a card lit from inside, with light running round its border.   @component glow-card
+ *
+ *   <piix-glow-card>
+ *     <h3>Realtime</h3>
+ *     <p>Everything updates the moment it changes.</p>
+ *   </piix-glow-card>
+ *
+ * A dark pixel card with a band of light chasing round its edge and a spotlight that follows your
+ * pointer under the content. It tilts a little toward the pointer, and a click sends a ring out
+ * across it. Put anything inside. Looks: liquid chrome, frosted glass (lovely over a scene),
+ * a two-ink riso print, or a green terminal.
+ *
+ *   look      glow | chrome | glass | riso | crt              default: glow
+ *   palette   the colours of the light                    default: violet (or the look's own)
+ *   pixel     size of one pixel, px                       default: 3
+ *   tilt      "none" keeps it flat */
+class PiixGlowCardElement extends GLStage {
+  get _defPal() { const l = glLook(this); return l === 'glow' ? 'violet' : GL_LOOKS[l][0]; }
+  constructor() { super(); this._defPx = 3; this._click = [.5, .5, -9]; this._tilt = [0, 0]; }
+  _hostCss() { return 'display:block;color:#f2eef8;transform-style:preserve-3d;transition:transform .2s cubic-bezier(.2,.8,.2,1);' + glLookHost(glLook(this)); }
+  _css() {
+    const l = glLook(this), txt = l === 'glow' ? 'color:#f2eef8' : GL_LOOK_TEXT[l](this._pal.list);
+    return `.in{position:relative;padding:28px 26px 26px;font:400 15px/1.5 "Bricolage Grotesque",system-ui,sans-serif;${txt}}
+::slotted(h3),::slotted(h2){margin:0 0 .4em!important;font-weight:750!important;font-size:22px!important;letter-spacing:-.02em;color:inherit}
+::slotted(p){margin:0!important;opacity:.8}`;
+  }
+  _html() { return '<canvas aria-hidden="true"></canvas><div class="in" part="content"><slot></slot></div>'; }
+  _setup() {
+    this.addEventListener('pointerdown', e => { const r = this.getBoundingClientRect(); this._click = [(e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height, now()]; });
+  }
+  _shader() { return GL_LOOKS[glLook(this)][1]; }
+  _uniforms(T, dt) {
+    /* lean toward the pointer while it's over the card */
+    if (this.getAttribute('tilt') !== 'none' && !reduced()) {
+      const want = this._hov > .05 ? [(this._m[1] - .5) * 7, (this._m[0] - .5) * -9] : [0, 0];
+      this._tilt[0] = lerp(this._tilt[0], want[0] * this._hov, Math.min(1, dt * 8)); this._tilt[1] = lerp(this._tilt[1], want[1] * this._hov, Math.min(1, dt * 8));
+      this.style.transform = `perspective(900px) rotateX(${this._tilt[0].toFixed(2)}deg) rotateY(${(-this._tilt[1]).toFixed(2)}deg)`;
+    }
+    return { u_k: [this._click[0], this._click[1], (now() - this._click[2]) / 1000, 1], u_j: [.02, 0, 0, 0] };
+  }
+}
+define('piix-glow-card', PiixGlowCardElement);
+ELEMENTS['glow-card'] = 'piix-glow-card';
+
+/* ---- gl/hero.js ---- */
+/* HERO: a whole hero section on a GPU pixel background.   @component hero  @needs shader  @needs scene
+ *
+ *   <piix-hero kind="horizon">
+ *     <p class="eyebrow">New · v1.0</p>
+ *     <h1>Build something loud</h1>
+ *     <p>One line of HTML and your landing page glows.</p>
+ *     <piix-glow-button>Get started</piix-glow-button>
+ *   </piix-hero>
+ *
+ * The background is any of the shader kinds. It dissolves in pixel by pixel when the hero scrolls
+ * into view, then the content rises in after it. Scanlines and a soft vignette sit over the top;
+ * the pointer bends the background. Put anything inside: it's laid out centred, and headings,
+ * paragraphs and buttons get hero-sized type.
+ *
+ *   kind      mesh | warp | aurora | crystal | liquid | horizon | nebula | topo | dots | fire   default: mesh
+ *   scene     use an illustrated scene instead: sakura | alps | lake | galaxy | rays | vortex | train | poppies | castle | vista
+ *   palette   any palette name or your own colours        default: the kind's own
+ *   pixel     size of one background pixel, px             default: 5
+ *   align     center | left                                default: center
+ *   height    any CSS length                               default: min(88vh, 780px) */
+class PiixHeroElement extends HTMLElement {
+  static get observedAttributes() { return ['kind', 'scene', 'palette', 'pixel', 'align', 'height', 'dither', 'speed']; }
+  constructor() { super(); this.attachShadow({ mode: 'open' }); }
+  connectedCallback() {
+    this._build();
+    this._io = new IntersectionObserver(es => { if (es[es.length - 1].isIntersecting) { this.toggleAttribute('data-in', true); this._io.disconnect(); } }, { threshold: .2 });
+    this._io.observe(this);
+  }
+  disconnectedCallback() { if (this._io) this._io.disconnect(); }
+  attributeChangedCallback(n, a, b) { if (a !== b && this.shadowRoot.firstChild) this._build(); }
+  _build() {
+    const at = n => this.getAttribute(n), left = at('align') === 'left';
+    const sc = this.getAttribute('scene'), pass = ['kind', 'palette', 'dither', 'speed'].filter(n => this.hasAttribute(n)).map(n => ` ${n}="${String(at(n)).replace(/"/g, '&quot;')}"`).join('');
+    this.shadowRoot.innerHTML = `<style>
+:host{display:block;position:relative;isolation:isolate;overflow:hidden;min-height:${at('height') || 'min(88vh,780px)'};color:#fff;font-family:"Bricolage Grotesque",system-ui,sans-serif}
+.bg{position:absolute;inset:0;z-index:0}
+.veil{position:absolute;inset:0;z-index:1;opacity:${sc ? .55 : 1};pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 35%,rgba(5,3,10,.55) 100%),repeating-linear-gradient(0deg,rgba(0,0,0,.12) 0 2px,transparent 2px 4px)}
+.in{position:relative;z-index:2;min-height:inherit;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:${left ? 'flex-start' : 'center'};text-align:${left ? 'left' : 'center'};padding:clamp(48px,8vw,120px) clamp(20px,6vw,96px);gap:4px;opacity:0;transform:translateY(18px);transition:opacity .7s .9s,transform .7s .9s cubic-bezier(.2,.8,.2,1)}
+:host([data-in]) .in{opacity:1;transform:none}
+::slotted(h1){margin:0 0 .25em!important;font-weight:800!important;font-size:clamp(40px,7vw,104px)!important;line-height:.95!important;letter-spacing:-.04em!important;text-shadow:0 4px 0 rgba(0,0,0,.35),0 0 40px rgba(0,0,0,.35)}
+::slotted(p){margin:0 0 1.3em!important;max-width:48ch;font-size:clamp(16px,1.9vw,21px)!important;line-height:1.45!important;opacity:.9;text-shadow:0 2px 12px rgba(0,0,0,.6)}
+::slotted(.eyebrow){margin:0 0 1em!important;padding:6px 12px;font:400 12px/1 "Silkscreen",ui-monospace,monospace!important;letter-spacing:.08em;text-transform:uppercase;background:rgba(10,8,16,.55);border:2px solid rgba(255,255,255,.35)}
+.cue{position:absolute;z-index:2;left:50%;bottom:22px;width:12px;height:12px;margin-left:-6px;border-right:4px solid #fff;border-bottom:4px solid #fff;transform:rotate(45deg);opacity:.7;animation:cue 1.6s steps(4) infinite}
+@keyframes cue{50%{transform:translateY(6px) rotate(45deg)}}
+@media (prefers-reduced-motion:reduce){.in{transition:none;opacity:1;transform:none}.cue{animation:none}}
+</style><div class="bg">${sc ? `<piix-scene kind="${sc.replace(/"/g, '')}"${pass.replace(/ kind="[^"]*"/, '')} pixel="${at('pixel') || 4}" fill></piix-scene>` : `<piix-shader${pass} pixel="${at('pixel') || 5}" fill></piix-shader>`}</div><div class="veil"></div><div class="in" part="content"><slot></slot></div><i class="cue" aria-hidden="true"></i>`;
+    const sh = this.shadowRoot.querySelector('piix-shader, piix-scene');
+    sh._introLen = 1.2;
+  }
+}
+define('piix-hero', PiixHeroElement);
+ELEMENTS.hero = 'piix-hero';
+
+/* ---- gl/input.js ---- */
+/* INPUT: a text field with a pixel border that lights up as you type.   @component input
+ *
+ *   <piix-input name="email" type="email" placeholder="you@site.com">Email</piix-input>
+ *
+ * A dark pixel field. Focus it and light starts running round its border; every key sends a
+ * little ring out from the caret. Whatever you put inside is its label. It's a real form field:
+ * it has a value, it's labelled for screen readers, and it submits with the form it's in.
+ *
+ *   name, type, value, placeholder, required, disabled, autocomplete, maxlength
+ *   look      glow | chrome | glass | riso | crt              default: glow
+ *   palette   the colours of the light                    default: lime (or the look's own)
+ *   pixel     size of one pixel, px                       default: 3
+ *
+ *   events: input, change */
+class PiixInputElement extends GLStage {
+  static get formAssociated() { return true; }
+  static get observedAttributes() { return [...GLStage.observedAttributes, 'placeholder', 'type', 'disabled', 'required']; }
+  get _defPal() { const l = glLook(this); return l === 'glow' ? 'lime' : GL_LOOKS[l][0]; }
+  constructor() { super(); this._defPx = 3; this._defDither = .4; this._click = [.5, .5, -9]; this._int = this.attachInternals ? this.attachInternals() : null; this._focus = 0; }
+  get value() { return this._in ? this._in.value : this.getAttribute('value') || ''; }
+  set value(v) { if (this._in) this._in.value = v; this._sync(); }
+  _hostCss() { return 'display:block'; }
+  _css() {
+    const l = this._pal.list;
+    return `label{display:block;margin-bottom:8px;font:400 12px/1 ${KIT_FONT};text-transform:uppercase;letter-spacing:.06em;color:inherit;opacity:.8}
+.box{position:relative;${glLookHost(glLook(this))}}
+input{all:unset;position:relative;z-index:1;box-sizing:border-box;width:100%;padding:15px 18px;font:500 16px/1.2 "Bricolage Grotesque",system-ui,sans-serif;${glLook(this) === 'glow' ? 'color:#f2eef8' : GL_LOOK_TEXT[glLook(this)](l)};caret-color:${l[l.length - 2]}}
+input::placeholder{color:#8e869c}
+:host([disabled]){opacity:.5}`;
+  }
+  _html() {
+    const a = n => this.hasAttribute(n) ? ` ${n}="${String(this.getAttribute(n)).replace(/"/g, '&quot;')}"` : '';
+    return `<label for="f" part="label"><slot></slot></label><div class="box"><canvas aria-hidden="true"></canvas><input id="f" part="input"${a('type')}${a('placeholder')}${a('value')}${a('autocomplete')}${a('maxlength')}${this.hasAttribute('required') ? ' required' : ''}${this.hasAttribute('disabled') ? ' disabled' : ''}></div>`;
+  }
+  _box() { return this.shadowRoot.querySelector('.box'); }
+  _setup() {
+    const i = this._in = this.shadowRoot.querySelector('input');
+    i.addEventListener('focus', () => { this._focused = true; });
+    i.addEventListener('blur', () => { this._focused = false; });
+    i.addEventListener('input', () => {
+      /* a ring from roughly where the caret is */
+      const k = i.value.length ? clamp((i.selectionStart || i.value.length) / Math.max(12, i.value.length * 1.6), .05, .95) : .05;
+      this._click = [k, .5, now()];
+      this._sync();
+      this.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    });
+    i.addEventListener('change', () => this.dispatchEvent(new Event('change', { bubbles: true })));
+    this._sync();
+  }
+  _sync() {
+    if (!this._int || !this._in) return;
+    this._int.setFormValue(this._in.value);
+    if (this._in.validity) this._int.setValidity(this._in.validity.valid ? {} : this._in.validity, this._in.validationMessage, this._in);
+  }
+  _shader() { return GL_LOOKS[glLook(this)][1]; }
+  _uniforms(T, dt) {
+    this._focus = lerp(this._focus, this._focused ? 1 : 0, Math.min(1, dt * 6));
+    return { u_hover: Math.max(this._hov * .5, this._focus), u_mouse: this._focused ? [this._click[0], .5] : this._m, u_k: [this._click[0], this._click[1], (now() - this._click[2]) / 1000, 1], u_j: [this._focus * .03, 0, 0, 0] };
+  }
+}
+define('piix-input', PiixInputElement);
+ELEMENTS.input = 'piix-input';
+
+/* ---- gl/kbd.js ---- */
+/* KBD: a pixel keycap that presses down when you press the real key.   @component kbd
+ *
+ *   Press <piix-kbd>⌘</piix-kbd> <piix-kbd>K</piix-kbd> to search
+ *
+ * A chunky keycap with a lit top face and a skirt underneath. Press that key on your keyboard
+ * and it goes down with you, and comes back up when you let go. Great for shortcut hints,
+ * onboarding and docs. It reads as normal keyboard text for screen readers.
+ *
+ *   key       the key to listen for, if the label isn't it (Enter, Escape, ArrowUp, " "…)
+ *   theme     light | dark | lime                              default: light
+ *   size      sm | md | lg                                     default: md */
+const KBD_KEYS = { '⌘': 'Meta', '⌃': 'Control', '⇧': 'Shift', '⌥': 'Alt', '↵': 'Enter', '⏎': 'Enter', '⎋': 'Escape', '⇥': 'Tab', '⌫': 'Backspace', '↑': 'ArrowUp', '↓': 'ArrowDown', '←': 'ArrowLeft', '→': 'ArrowRight', space: ' ', esc: 'Escape', ctrl: 'Control', cmd: 'Meta', alt: 'Alt', opt: 'Alt', shift: 'Shift', enter: 'Enter', return: 'Enter', tab: 'Tab' };
+const KBD_THEMES = { light: ['#fbf8f2', '#d9d0bf', '#17121f'], dark: ['#2a2236', '#120e18', '#f2eef8'], lime: ['#c6f432', '#6f8f12', '#17121f'] };
+class PiixKbdElement extends HTMLElement {
+  static get observedAttributes() { return ['theme', 'size']; }
+  constructor() { super(); this.attachShadow({ mode: 'open' }); }
+  connectedCallback() {
+    this._build();
+    const want = () => { const k = this.getAttribute('key') || this.textContent.trim(); return KBD_KEYS[k] || KBD_KEYS[k.toLowerCase()] || k; };
+    const match = e => { const w = want(); return e.key === w || (w.length === 1 && e.key.toLowerCase() === w.toLowerCase()); };
+    addEventListener('keydown', this._kd = e => { if (match(e)) this.toggleAttribute('data-down', true); });
+    addEventListener('keyup', this._ku = e => { if (match(e) || e.key === 'Meta') this.removeAttribute('data-down'); });
+    addEventListener('blur', this._bl = () => this.removeAttribute('data-down'));
+  }
+  disconnectedCallback() { removeEventListener('keydown', this._kd); removeEventListener('keyup', this._ku); removeEventListener('blur', this._bl); }
+  attributeChangedCallback() { if (this.shadowRoot.firstChild) this._build(); }
+  _build() {
+    const [top, skirt, ink] = KBD_THEMES[this.getAttribute('theme')] || KBD_THEMES.light;
+    const [fs, h, pad] = { sm: [11, 3, '4px 7px 5px'], lg: [17, 5, '8px 13px 9px'] }[this.getAttribute('size')] || [13, 4, '6px 10px 7px'];
+    this.shadowRoot.innerHTML = `<style>
+:host{display:inline-block;vertical-align:middle;margin:0 1px;padding-bottom:${h}px}
+kbd{display:inline-block;min-width:1.1em;padding:${pad};text-align:center;font:400 ${fs}px/1 "Silkscreen","Segoe UI Symbol","Apple Symbols",ui-monospace,monospace;color:${ink};background:${top};
+  box-shadow:inset 0 0 0 2px ${ink},inset 0 -${h}px 0 ${skirt},0 ${h}px 0 0 ${ink};clip-path:polygon(0 2px,2px 2px,2px 0,calc(100% - 2px) 0,calc(100% - 2px) 2px,100% 2px,100% calc(100% + ${h}px),0 calc(100% + ${h}px));
+  transform:translateY(0);transition:transform 40ms steps(1),box-shadow 40ms steps(1)}
+:host([data-down]) kbd{transform:translateY(${h - 1}px);box-shadow:inset 0 0 0 2px ${ink},inset 0 -1px 0 ${skirt},0 1px 0 0 ${ink}}
+</style><kbd part="key"><slot></slot></kbd>`;
+  }
+}
+define('piix-kbd', PiixKbdElement);
+ELEMENTS.kbd = 'piix-kbd';
+
+/* ---- gl/loader.js ---- */
+/* LOADER: little pixel loaders drawn on the GPU.   @component loader
+ *
+ *   <piix-loader></piix-loader>
+ *   <piix-loader kind="snake" palette="sunset" size="64"></piix-loader>
+ *
+ * A ring that chases its tail, pixels in orbit, a snake running round a square, equaliser bars,
+ * and rings pulsing out. Screen readers hear "Loading" (or your label).
+ *
+ *   kind      ring | orbit | snake | bars | pulse           default: ring
+ *   palette   its colours                                 default: lime
+ *   size      px                                          default: 48
+ *   label     what's loading                              default: Loading
+ *   pixel     size of one pixel, px                       default: 3 */
+const LD_KINDS = { ring: 0, orbit: 1, snake: 2, bars: 3, pulse: 4 };
+const LD_SHADER = `vec4 effect(vec2 uv,vec2 cell){
+  vec2 q=uv-.5;float r=length(q)*2.,a=atan(q.y,q.x)/6.2831+.5,t=u_time,k=u_k.x,v=0.;
+  if(k==0.){float arc=fract(a-t*.9);v=(r>.5&&r<.9&&arc<.75)?.15+.85*arc/.75:0.;}
+  else if(k==1.){for(int i=0;i<4;i++){float fi=float(i),an=-t*3.-fi*.5;vec2 c=vec2(cos(an),sin(an))*.3;v=max(v,step(length(q-c),.11-fi*.015)*(1.-fi*.2));}}
+  else if(k==2.){float n=u_res.x;vec2 g=cell;if(min(min(g.x,g.y),min(n-1.-g.x,n-1.-g.y))>1.)return vec4(0.);
+    float i;if(g.y<=1.)i=g.x;else if(g.x>=n-2.)i=n+g.y;else if(g.y>=n-2.)i=2.*n+n-1.-g.x;else i=3.*n+n-1.-g.y;
+    float d=mod(fract(t*.4)*4.*n-i,4.*n);v=d<n*1.4?1.-d/(n*1.4):0.;}
+  else if(k==3.){float b=floor(uv.x*5.),f=fract(uv.x*5.),h=.2+.7*(.5+.5*sin(t*6.+b*1.2));v=(f>.18&&f<.82&&abs(uv.y-.5)*2.<h)?.35+.65*h:0.;}
+  else{float w=fract(r*1.3-t*.9);v=r<1.?smoothstep(.2,0.,abs(w-.5)-.12)*(1.-r*.8):0.;}
+  if(v<.03)return vec4(0.);return vec4(dpal(.3+.7*v,cell),1.);}`;
+class PiixLoaderElement extends GLStage {
+  static get observedAttributes() { return [...GLStage.observedAttributes, 'size', 'label']; }
+  constructor() { super(); this._defPx = 3; this._defPal = 'lime'; this._defDither = 0; }
+  _hostCss() { const s = +this.getAttribute('size') || 48; return `display:inline-block;vertical-align:middle;width:${s}px;height:${s}px`; }
+  _setup() { this.setAttribute('role', 'status'); this.setAttribute('aria-label', this.getAttribute('label') || 'Loading'); }
+  _shader() { return LD_SHADER; }
+  _uniforms() { return { u_k: [LD_KINDS[this.getAttribute('kind')] || 0, 0, 0, 0] }; }
+}
+define('piix-loader', PiixLoaderElement);
+ELEMENTS.loader = 'piix-loader';
+
+/* ---- gl/marquee.js ---- */
+/* MARQUEE: a row that scrolls forever and fades out at its ends in dithered pixels.   @component marquee
+ *
+ *   <piix-marquee>
+ *     <img src="logo-a.svg" alt="Acme"> <img src="logo-b.svg" alt="Globex"> …
+ *   </piix-marquee>
+ *
+ * Logos, words, anything: they slide past in a loop with no seam, and instead of a soft fade the
+ * edges break up into a pixel dither. Hover to pause it. For people who prefer less motion it
+ * holds still. The copies it makes to loop are hidden from screen readers.
+ *
+ *   speed     pixels a second                              default: 40
+ *   gap       px between items                             default: 48
+ *   fade      px of dithered fade at each end              default: 96
+ *   reverse   scroll the other way */
+class PiixMarqueeElement extends HTMLElement {
+  static get observedAttributes() { return ['speed', 'gap', 'fade', 'reverse']; }
+  constructor() { super(); this.attachShadow({ mode: 'open' }); this._tick = this._tick.bind(this); this._x = 0; }
+  connectedCallback() {
+    this._build();
+    this._ro = new ResizeObserver(() => this._mask()); this._ro.observe(this);
+    this.addEventListener('pointerenter', this._pe = () => { this._paused = true; });
+    this.addEventListener('pointerleave', this._pl = () => { this._paused = false; });
+    sub(this._tick);
+  }
+  disconnectedCallback() { unsub(this._tick); if (this._ro) this._ro.disconnect(); }
+  attributeChangedCallback() { if (this.shadowRoot.firstChild) this._build(); }
+  _build() {
+    const gap = +this.getAttribute('gap') || 48;
+    this.shadowRoot.innerHTML = `<style>
+:host{display:block;overflow:hidden;-webkit-mask-size:100% 100%;mask-size:100% 100%}
+.track{display:flex;width:max-content;will-change:transform}
+.row{display:flex;align-items:center;gap:${gap}px;padding-right:${gap}px;flex:0 0 auto}
+.row ::slotted(*){flex:0 0 auto}
+</style><div class="track"><div class="row" part="row"><slot></slot></div><div class="row copy" aria-hidden="true"></div></div>`;
+    this._track = this.shadowRoot.querySelector('.track');
+    this._copy = this.shadowRoot.querySelector('.copy');
+    /* the second row is a copy of the first, so the loop has no seam */
+    this._copy.innerHTML = '';
+    for (const n of this.childNodes) { const c = n.cloneNode(true); if (c.nodeType === 1) { c.setAttribute('aria-hidden', 'true'); c.setAttribute('tabindex', '-1'); } this._copy.appendChild(c); }
+    this._mask();
+  }
+  /* a mask that's solid in the middle and dithered toward the ends, pixel by pixel */
+  _mask() {
+    const w = Math.max(1, Math.round(this.clientWidth)), f = Math.min(w / 2, +this.getAttribute('fade') || 96), px = 4;
+    if (!w || w === this._mw) return;
+    this._mw = w;
+    const c = document.createElement('canvas'); c.width = Math.ceil(w / px); c.height = 4;
+    const g = c.getContext('2d'), d = g.createImageData(c.width, 4), B = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+    for (let y = 0; y < 4; y++) for (let x = 0; x < c.width; x++) {
+      const at = x * px, k = Math.min(1, at / f, (w - at) / f), i = (y * c.width + x) * 4;
+      d.data[i + 3] = k > (B[(y % 4) * 4 + (x % 4)] + .5) / 16 ? 255 : 0;
+    }
+    g.putImageData(d, 0, 0);
+    const url = `url(${c.toDataURL()})`;
+    this.style.webkitMaskImage = url; this.style.maskImage = url;
+    this.style.imageRendering = 'pixelated';
+  }
+  _tick(dt) {
+    if (!this._track || reduced() || this._paused) return;
+    const w = this._track.firstElementChild.offsetWidth;
+    if (!w) return;
+    const dir = this.hasAttribute('reverse') ? 1 : -1;
+    this._x = (this._x + dir * (+this.getAttribute('speed') || 40) * dt) % w;
+    if (this._x > 0) this._x -= w;
+    this._track.style.transform = `translateX(${this._x.toFixed(1)}px)`;
+  }
+}
+define('piix-marquee', PiixMarqueeElement);
+ELEMENTS.marquee = 'piix-marquee';
+
+/* ---- gl/pixelimage.js ---- */
+/* PIXEL IMAGE: any picture, pixelated and dithered on the GPU, with a lens.   @component pixel-image
+ *
+ *   <piix-pixel-image src="photo.jpg" alt="Our team"></piix-pixel-image>
+ *
+ * Shows your image as dithered pixels in the palette, as a mosaic, or as halftone dots. Move the
+ * pointer over it and a lens shows the real picture underneath; hover a mosaic and it resolves.
+ * It crops to fill its box like object-fit: cover, and keeps the image's own shape if you don't
+ * give it a height. The image needs to be on your site or served with CORS.
+ *
+ *   src       the image
+ *   alt       what it shows, for screen readers
+ *   effect    dither | mosaic | halftone                    default: dither
+ *   palette   the colours for dither and halftone           default: mono
+ *   pixel     size of one pixel, px                         default: 3
+ *   lens      "none" turns the lens off
+ *   height    any CSS length (default: the image's shape) */
+const PI_FX = { dither: 0, mosaic: 1, halftone: 2 };
+const PI_SHADER = `vec3 img(vec2 p){vec2 s=u_j.xy;p=(p-.5)*s+.5;return texture2D(u_tex,p).rgb;}
+float lum(vec3 c){return dot(c,vec3(.3,.59,.11));}
+vec4 effect(vec2 uv,vec2 cell){
+  vec3 c=img(uv);float L=lum(c),fx=u_k.x;vec3 o;
+  if(fx==1.){float b=mix(14.,2.,u_hover);vec2 g=(floor(cell/b)+.5)*b/u_res;o=floor(img(g)*6.+.5)/6.;}
+  else if(fx==2.){vec2 g=floor(cell/4.),f=mod(cell,4.)-1.5;float l=lum(img((g*4.+2.)/u_res)),k=lum(pal(0.))>.5?1.-l:l;o=length(f)<k*2.3?pal(1.):pal(0.);}
+  else o=dpal(pow(L,.9),cell);
+  if(u_k.y>0.){float d=length(aspect(uv)-aspect(u_mouse));float lens=smoothstep(.2,.17,d)*u_hover;o=mix(o,c,lens);if(abs(d-.19)<.012*u_hover&&u_hover>.1)o=pal(1.);}
+  return vec4(o,1.);}`;
+class PiixPixelImageElement extends GLStage {
+  static get observedAttributes() { return [...GLStage.observedAttributes, 'alt', 'effect', 'lens']; }
+  constructor() { super(); this._defPx = 3; this._defPal = 'mono'; this._img = new Image(); this._img.crossOrigin = 'anonymous'; this._ready = false; }
+  _hostCss() { return 'display:block;overflow:hidden;background:#0b0a10'; }
+  _setup() {
+    this.setAttribute('role', 'img');
+    if (this.getAttribute('alt')) this.setAttribute('aria-label', this.getAttribute('alt'));
+    const src = this.getAttribute('src');
+    if (src && this._img.getAttribute('src') !== src) {
+      this._ready = false;
+      this._img.onload = () => {
+        this._ready = 'upload';
+        if (!this.getAttribute('height')) this.style.aspectRatio = `${this._img.naturalWidth} / ${this._img.naturalHeight}`;
+        this._fit();
+      };
+      this._img.src = src;
+    } else if (!this.getAttribute('height') && !this.style.aspectRatio) this.style.aspectRatio = '16 / 10';
+  }
+  _texture() {
+    if (!this._ready) return null;
+    const t = { owner: this, src: this._img, dirty: this._ready === 'upload' };
+    this._ready = true;
+    return t;
+  }
+  _shader() { return PI_SHADER; }
+  _uniforms() {
+    /* cover: scale the image coordinates so it fills the box and crops the overflow */
+    const ia = this._img.naturalWidth / (this._img.naturalHeight || 1) || 1, ea = this._W / this._H, s = ea > ia ? [1, ia / ea] : [ea / ia, 1];
+    return { u_k: [PI_FX[this.getAttribute('effect')] ?? 0, this.getAttribute('lens') === 'none' ? 0 : 1, 0, 0], u_j: [s[0], s[1], 0, 0] };
+  }
+}
+define('piix-pixel-image', PiixPixelImageElement);
+ELEMENTS['pixel-image'] = 'piix-pixel-image';
+
+/* ---- gl/reveal.js ---- */
+/* REVEAL: content that dissolves in, pixel by pixel, when it scrolls into view.   @component reveal
+ *
+ *   <piix-reveal pattern="rain">
+ *     <img src="screenshot.png" alt="The dashboard">
+ *   </piix-reveal>
+ *
+ * Wrap anything. Until it's on screen it hides under a layer the colour of the page; then that
+ * layer breaks up into pixels and falls away, with a glowing edge where it's dissolving. Once
+ * it's done the layer is gone and the GPU rests. People who prefer less motion just see it.
+ *
+ *   pattern   dither | rain | scan | spiral                default: dither
+ *   color     what it dissolves out of                     default: the background behind it
+ *   palette   the glowing edge                             default: lime
+ *   duration  seconds                                      default: 1.1
+ *   delay     seconds to wait once it's on screen          default: 0
+ *   pixel     size of one pixel, px                        default: 6 */
+const RV_PAT = { dither: 0, rain: 1, scan: 2, spiral: 3 };
+const RV_SHADER = `vec4 effect(vec2 uv,vec2 cell){
+  float p=u_k.y,pat=u_k.x,th;
+  if(pat==1.)th=hash(vec2(cell.x,3.))*.5+(1.-uv.y)*.5;
+  else if(pat==2.)th=uv.x*.82+bayer8(cell)*.18;
+  else if(pat==3.){vec2 q=aspect(uv);th=fract(atan(q.y,q.x)/6.2831+.5+length(q)*1.3)*.72+bayer8(cell)*.28;}
+  else th=bayer8(cell)*.75+hash(cell)*.25;
+  float e=th-p*1.2+.1;
+  if(e<0.)return vec4(0.);
+  if(e<.1)return vec4(dpal(1.-e/.1*.6,cell),1.);
+  return vec4(u_j.rgb,1.);}`;
+class PiixRevealElement extends GLStage {
+  static get observedAttributes() { return [...GLStage.observedAttributes, 'pattern', 'color']; }
+  constructor() { super(); this._defPx = 6; this._defPal = 'lime'; this._defDither = 0; this._start = null; }
+  _hostCss() { return 'display:block;position:relative'; }
+  _html() { return '<slot></slot><canvas aria-hidden="true"></canvas>'; }
+  _css() { return 'canvas{z-index:2}'; }
+  /* the colour behind it: the first ancestor with a background */
+  _bg() { let el = this.parentElement; while (el) { const b = getComputedStyle(el).backgroundColor; if (b && b !== 'transparent' && !/rgba\(0, 0, 0, 0\)/.test(b)) return b; el = el.parentElement; } return '#ffffff'; }
+  _setup() {
+    const css = this.getAttribute('color') || this._bg();
+    this._col = glRGB(css);
+    this._done = reduced() || !glInit();
+    this._cv.style.display = this._done ? 'none' : '';
+    this._cv.style.background = this._done ? '' : css;
+    if (this._rio) this._rio.disconnect();
+    this._rio = new IntersectionObserver(es => { if (es[es.length - 1].isIntersecting && this._start == null) { this._start = now() + (+this.getAttribute('delay') || 0) * 1000; this._rio.disconnect(); } }, { threshold: .25 });
+    this._rio.observe(this);
+  }
+  _skip() { return this._done; }
+  _shader() { return RV_SHADER; }
+  _uniforms() {
+    const p = this._start == null ? 0 : clamp((now() - this._start) / ((+this.getAttribute('duration') || 1.1) * 1000), 0, 1);
+    if (this._cv.style.background) requestAnimationFrame(() => { this._cv.style.background = ''; });
+    if (p >= 1) { this._done = true; this._cv.style.display = 'none'; this.dispatchEvent(new CustomEvent('piix:revealed', { bubbles: true })); }
+    return { u_k: [RV_PAT[this.getAttribute('pattern')] || 0, p, 0, 0], u_j: [this._col[0], this._col[1], this._col[2], 0] };
+  }
+}
+define('piix-reveal', PiixRevealElement);
+ELEMENTS.reveal = 'piix-reveal';
+
+/* ---- gl/scene.js ---- */
+/* SCENE: whole illustrated places, painted on the GPU in pixels.   @component scene
+ *
+ *   <piix-scene kind="sakura"></piix-scene>
+ *   <piix-scene kind="alps" sky="none" fade="top" height="320px"></piix-scene>
+ *
+ * Not a texture or a photo: every scene is drawn from nothing in a shader, on a pixel grid,
+ * and dithered down to a handful of colours like a pixel-art painting. They move, and they
+ * answer the pointer: wind in the blossom, the sun follows you over the lake, the galaxy tilts,
+ * the riso rays swing toward you, the train window lets you look around.
+ *
+ *   sakura    a cherry tree over a misty forest, a lantern, a bench and falling petals
+ *   alps      snow peaks behind layers of green hills, pines and valley mist
+ *   lake      a flat sunset over a lake, a little boat, the sun follows the pointer
+ *   galaxy    a spiral galaxy with planets in orbit; the pointer tilts it
+ *   rays      two-ink riso print: light rays bursting from the horizon, a crescent moon
+ *   vortex    two-ink riso print: the sky swirling round a lone street lamp
+ *   train     a train window, the countryside rushing past, poles flashing by
+ *   poppies   a stormy sky over a field of red poppies blowing in the wind
+ *   castle    a pixel castle on a hill at night, windows flickering, a flag waving
+ *   vista     an anime summer sky, big clouds, a snowy peak and grass in the breeze
+ *
+ * Mix it into a normal page: sky="none" cuts the sky out so your page shows through behind
+ * the mountains (or round the window); fade dissolves an edge into whatever is behind it.
+ *
+ *   kind      which scene                                       default: sakura
+ *   sky       "none" makes the sky see-through
+ *   fade      top | bottom | both: dissolve that edge in dithered pixels
+ *   palette   repaint it in a palette (lime, sunset, gameboy…) instead of its own colours
+ *   levels    colours per channel, 2 to 16 (fewer = more pixel-art)   default: 6
+ *   pixel     size of one pixel, px                              default: 4
+ *   dither    0 for flat colour, 1 for full dither                default: 1
+ *   speed     1 is normal, 0 holds still                          default: 1
+ *   height    when not filling: px or any CSS length             default: 480px
+ *   fill      sit behind the content of the parent element */
+const SC_HEAD = `
+/* noise read from one shared random texture: a single lookup, so even big scenes compile fast */
+float tnoise(vec2 p){return texture2D(u_tex,(p+u_seed*3.7+.5)/256.).r;}
+float tfbm(vec2 p){float v=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int i=0;i<5;i++){v+=a*tnoise(p);p=m*p;a*=.5;}return v;}
+float h2(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+float ridged(vec2 q){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*(1.-abs(noise(q)*2.-1.));q*=2.03;a*=.5;}return v;}
+vec3 rgb(float r,float g,float b){return vec3(r,g,b)/255.;}
+float box(vec2 p,vec2 a,vec2 b){return step(a.x,p.x)*step(p.x,b.x)*step(a.y,p.y)*step(p.y,b.y);}
+float tri(vec2 p,vec2 b,float hw,float h){float k=(p.y-b.y)/h;return step(0.,k)*step(k,1.)*step(abs(p.x-b.x),hw*(1.-k));}
+float rbox(vec2 p,vec2 c,vec2 hs,float r){vec2 d=abs(p-c)-hs+r;return length(max(d,0.))+min(max(d.x,d.y),0.)-r;}
+float crescent(vec2 p,vec2 c,float r){return step(length(p-c),r)*step(r*.92,length(p-c-vec2(r*.45,r*.25)));}
+float W(){return u_res.x/u_res.y;}
+`;
+/* the end of every scene: colour it down to pixel art, then cut the sky / fade an edge */
+const SC_TAIL = `
+vec4 effect(vec2 uv,vec2 cell){
+  vec2 p=vec2((uv.x-.5)*u_res.x/u_res.y,uv.y),m=u_mouse-.5;
+  vec4 s=scene(uv,p,cell,m);
+  vec3 c=clamp(s.rgb,0.,1.);float b=bayer8(cell);
+  if(u_j.x>.5)c=dpal(dot(c,vec3(.299,.587,.114)),cell);
+  else{float L=max(u_j.y-1.,1.);c=floor(c*L+mix(.5,b*.999,u_dither))/L;}
+  float a=1.;
+  if(u_k.x>.5&&s.a>b*.999+.0005)a=0.;
+  float f=1.;
+  if(u_k.y==1.||u_k.y==3.)f=min(f,(1.-uv.y)/u_k.w);
+  if(u_k.y>=2.)f=min(f,uv.y/u_k.w);
+  if(f<b)a=0.;
+  return vec4(c,a);}`;
+
+const SC_KINDS = {
+  sakura: ['A cherry tree in bloom over a misty forest, with a lantern, a bench and falling petals', `
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,w=W(),xl=-w*.5,y=uv.y,sky=1.;
+  float fog=fbm(p*vec2(2.,3.)+vec2(t*.015,0.));
+  vec3 c=mix(rgb(20.,70.,62.),rgb(100.,176.,150.),clamp(y*.45+fog*.65-.05,0.,1.));
+  float fx=p.x*6.+m.x*.5,fid=floor(fx);
+  c=mix(c,rgb(26.,80.,70.),step(abs(fract(fx)-.5),.05+.06*h2(vec2(fid,3.)))*.5*smoothstep(.95,.3,y));
+  c+=rgb(120.,210.,170.)*.4*exp(-length((p-vec2(w*.08,.36))*vec2(1.,1.8))*2.2);
+  float gy=.2+.015*sin(p.x*4.);
+  if(y<gy){sky=0.;c=mix(rgb(36.,66.,38.),rgb(100.,146.,72.),fbm(vec2(p.x*14.,y*60.)));
+    c=mix(c,rgb(214.,122.,152.),step(.6,fbm(vec2(p.x*22.,y*70.)+7.))*.85);c*=.7+.3*smoothstep(0.,gy,y);}
+  float lx=xl+w*.38,ly=.47;
+  float glow=exp(-length((p-vec2(lx,ly))*vec2(1.,1.2))*7.)*(.85+.15*sin(t*7.)*sin(t*3.1));
+  c+=rgb(255.,196.,110.)*glow*.6;
+  if(box(p,vec2(lx-.005,gy-.02),vec2(lx+.005,ly-.03))+tri(p,vec2(lx,ly+.022),.042,.035)>0.){c=rgb(30.,22.,24.);sky=0.;}
+  if(box(p,vec2(lx-.024,ly-.035),vec2(lx+.024,ly+.024))>0.){c=mix(rgb(255.,206.,110.),rgb(255.,246.,205.),step(abs(p.x-lx),.011));sky=0.;}
+  float bx=lx+.07,bw=.26;
+  float bench=box(p,vec2(bx,.255),vec2(bx+bw,.27))+box(p,vec2(bx,.285),vec2(bx+bw,.297))+box(p,vec2(bx,.307),vec2(bx+bw,.319))
+    +box(p,vec2(bx+.012,gy-.01),vec2(bx+.022,.255))+box(p,vec2(bx+bw-.022,gy-.01),vec2(bx+bw-.012,.255));
+  if(bench>0.){c=mix(rgb(66.,38.,28.),rgb(150.,92.,56.),.35+glow*2.);sky=0.;}
+  float tc=xl+w*.17+.05*sin(y*3.5+1.),tw=.06+.1*pow(1.-clamp(y,0.,1.),2.)+.05*smoothstep(.32,.18,y);
+  float trunk=step(abs(p.x-tc),tw)*step(y,.8);
+  float b1x=(p.x-tc)/(w*.6),b1=.6+.2*sin(clamp(b1x,0.,1.)*2.6)-b1x*.12;
+  float br=step(0.,b1x)*step(b1x,1.)*step(abs(y-b1),.034*(1.-b1x)+.008);
+  float b2x=(p.x-tc)/(w*.28),b2=.68+.12*sin(clamp(-b2x,0.,1.)*2.6);
+  br+=step(b2x,0.)*step(-1.,b2x)*step(abs(y-b2),.03*(1.+b2x)+.006);
+  if(trunk+br>0.){sky=0.;c=mix(rgb(24.,18.,20.),rgb(62.,46.,42.),fbm(vec2(p.x*30.,y*8.)));
+    c=mix(c,rgb(160.,150.,96.)*(.55+glow),smoothstep(tw*.25,tw,p.x-tc)*trunk*.65);}
+  vec2 cq=p*vec2(2.2,2.8)+vec2(t*.02+m.x*.15,0.);
+  float d=fbm(cq)+smoothstep(.45,1.,y)*.95-.55-smoothstep(.6,.36,y)*.5;
+  if(d>.14){sky=0.;float l=fbm(p*9.+3.)*.7+(y-.5)*.6+p.x/w*.25+.12*m.y;
+    c=l<.3?rgb(104.,28.,60.):l<.44?rgb(168.,50.,94.):l<.58?rgb(214.,98.,140.):rgb(248.,172.,198.);
+    c=mix(c,rgb(20.,62.,56.),.3*step(fbm(p*16.),.3));}
+  vec2 mp=u_mouse*u_res;
+  for(int i=0;i<3;i++){float fi=float(i),s=8.+fi*5.;
+    vec2 dm=cell-mp,push=dm/(length(dm)+.001)*exp(-length(dm)/(14.+fi*4.))*(6.+fi*3.)*u_hover;
+    vec2 q=(cell-push)/s;q.y+=t*(.7+fi*.3);q.x+=t*.06+sin(q.y*.35+t*.5+fi*2.)*.18;
+    vec2 id=floor(q),f=fract(q);float h=h2(id+fi*17.);
+    if(h>.78){vec2 o=vec2(h2(id+3.),h2(id+5.))*.6+.2,dd=abs(f-o)*s;
+      if(dd.x<1.+fi*.6&&dd.y<.7+fi*.4){c=mix(rgb(255.,186.,208.),rgb(255.,236.,242.),h2(id));sky=0.;}}}
+  return vec4(c,sky);}`],
+
+  alps: ['Snowy mountains behind layers of green hills, with pine trees and mist in the valleys', `
+float peaks(float x){return .44+.17*(1.-abs(sin(x*2.1+1.)))+.11*(1.-abs(sin(x*4.7+2.)))+.05*(1.-abs(sin(x*11.3)))+.03*ridged(vec2(x*9.,1.));}
+float hill(float x,float fi){return .5*sin(x*(1.3+fi*.35)+fi*2.1)+.3*sin(x*(2.9+fi*.5)+fi*4.7)+.2*sin(x*(5.3+fi)+fi);}
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,y=uv.y,sky=1.;
+  vec3 sk=mix(rgb(104.,124.,112.),rgb(66.,84.,76.),y),c=sk;
+  float x0=p.x+m.x*.02,f0=x0*1.4+3.;
+  float r0=peaks(x0),sl=peaks(x0+.006)-peaks(x0-.006);
+  if(y<r0){sky=0.;
+    c=mix(rgb(150.,164.,166.),rgb(250.,250.,244.),smoothstep(-.004,.004,-sl)*.85+.15*fbm(p*30.));
+    c=mix(c,rgb(214.,220.,214.),smoothstep(r0-.06,r0-.2,y));}
+  float cl=fbm(vec2(p.x*3.-t*.02,y*7.))+.45*smoothstep(.09,0.,abs(y-.44));
+  if(cl>.86&&y<.56&&y>.34){sky=0.;c=mix(rgb(226.,230.,224.),rgb(255.,255.,250.),smoothstep(.86,1.,cl));}
+  for(int i=0;i<4;i++){float fi=float(i),k=(fi+1.)/4.,x=p.x+m.x*.05*(fi+1.);
+    float h=.47-fi*.1+(.07+fi*.012)*hill(x,fi),dh=hill(x+.01,fi)-hill(x-.01,fi);
+    float tx=x*(34.+fi*12.),tid=floor(tx),th=h2(vec2(tid,fi));
+    float tree=step(.55,th)*step(.0,sin(x*2.3+fi*3.)-.2)*tri(vec2(fract(tx),y),vec2(.5,h-.008-th*.06*(1.-fi*.15)),.36,.016+fi*.012+.012*th);
+    if(y<h||tree>0.){sky=0.;
+      vec3 lit=mix(rgb(176.,198.,140.),rgb(136.,182.,76.),k),shade=mix(rgb(132.,156.,118.),rgb(70.,116.,48.),k);
+      c=mix(shade,lit,smoothstep(-.03,.03,dh))*(.92+.14*fbm(vec2(x*10.,y*24.)));
+      c=mix(c,mix(sk,vec3(.93),.45),smoothstep(.03,.2,h-y)*(.75-k*.5));
+      c=mix(c,sk,(1.-k)*.3);
+      if(tree>0.)c=mix(rgb(30.,62.,40.),mix(sk,vec3(.9),.3),(1.-k)*.55);}}
+  return vec4(c,sky);}`],
+
+  lake: ['A flat-colour sunset over a lake, with a little boat drifting across', `
+vec4 above(vec2 q,float sunY){
+  vec3 c=mix(rgb(236.,150.,108.),rgb(36.,118.,212.),smoothstep(.46,1.,q.y));float sky=1.;
+  c=mix(c,rgb(150.,132.,168.),.35*exp(-abs(q.y-.62)*8.));
+  if(length(q-vec2(0.,sunY))<.3){c=mix(rgb(242.,104.,52.),rgb(220.,192.,126.),smoothstep(sunY-.3,sunY+.3,q.y));sky=0.;}
+  float h1=.59+.07*sin(q.x*2.3+1.)+.035*sin(q.x*5.1+2.);
+  float h2_=.52+.08*sin(q.x*1.7+3.5)+.03*sin(q.x*4.+1.);
+  if(q.y<h1){c=mix(rgb(20.,96.,76.),rgb(36.,152.,116.),smoothstep(h1-.15,h1,q.y));sky=0.;}
+  if(q.y<h2_){c=mix(rgb(8.,46.,34.),rgb(22.,104.,74.),smoothstep(h2_-.12,h2_,q.y));sky=0.;}
+  return vec4(c,sky);}
+float boat(vec2 p,float bx,float by){
+  float k=(p.y-by)/.016;
+  return step(0.,k)*step(k,1.)*step(abs(p.x-bx),.05+.02*k)+box(p,vec2(bx-.004,by+.016),vec2(bx+.008,by+.036))
+    +step(length(p-vec2(bx+.002,by+.044)),.008)+step(abs((p.x-bx)-(p.y-by-.03)*.9),.0025)*box(p,vec2(bx-.03,by-.01),vec2(bx+.04,by+.06));}
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,H=.46,sunY=.56+(u_mouse.y-.5)*.34;vec2 q=p+vec2(m.x*.05,0.);
+  float bx=-.7+fract(t*.006)*1.4,by=H-.2;
+  if(uv.y>=H)return above(q,sunY);
+  float dep=H-uv.y,rip=sin(uv.y*900./(dep*30.+1.)+t*2.)*.006*(1.+dep*3.);
+  vec4 r=above(vec2(q.x+rip,2.*H-uv.y),sunY);
+  vec3 wat=mix(rgb(8.,70.,180.),rgb(10.,176.,214.),smoothstep(0.,.46,dep));
+  wat=mix(wat,rgb(120.,110.,140.),.25*exp(-dep*6.));
+  vec3 c=mix(wat,r.rgb,.6*exp(-dep*2.2)*(1.-r.a*.5));
+  float sp=step(.975,h2(vec2(floor(cell.x/4.+sin(cell.y*.7+t)*1.5),cell.y)))*exp(-abs(q.x)*5.)*exp(-dep*3.);
+  c=mix(c,rgb(255.,210.,150.),sp);
+  if(boat(q,bx,by)>0.)c=rgb(30.,22.,26.);
+  if(boat(vec2(q.x+rip*.5,2.*by-uv.y),bx,by)>0.)c=mix(c,rgb(30.,22.,26.),.45);
+  return vec4(c,0.);}`],
+
+  galaxy: ['A spiral galaxy with planets in orbit around its core', `
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,sky=1.,ang=-.42+m.x*.6,sq=.42+m.y*.35,ca=cos(ang),sa=sin(ang);
+  vec2 q=p-vec2(0.,.5),d=vec2(ca*q.x+sa*q.y,-sa*q.x+ca*q.y);d.y/=sq;
+  float r=length(d),a=atan(d.y,d.x);
+  vec3 c=rgb(8.,12.,26.)+rgb(70.,34.,100.)*smoothstep(.55,.9,fbm(p*2.+t*.01))*.6;
+  float st=h2(cell);if(st>.992)c+=vec3(.8)*(.55+.45*sin(t*2.+st*90.));
+  float arm=.5+.5*cos(2.*a+log(r+.001)*7.-t*.25),dust=fbm(vec2(a*3.+log(r+.001)*6.-t*.1,r*10.));
+  float lum=(arm*arm*smoothstep(1.25,.2,r)*(.55+.7*dust)+exp(-r*5.)*1.3)*(.8+.3*sin(r*48.+dust*6.));
+  vec3 dc=mix(rgb(70.,190.,190.),rgb(232.,170.,72.),smoothstep(.95,.35,r));
+  dc=mix(dc,rgb(255.,242.,205.),smoothstep(.28,0.,r));
+  c=mix(c,dc*min(lum,1.3),smoothstep(.06,.35,lum)*step(r,1.3));
+  if(lum>.3)sky=0.;
+  for(int i=0;i<6;i++){float fi=float(i),ri=.32+fi*.16,sp=.3/(1.+fi*.7),ph=fi*2.1;
+    vec2 pd=vec2(cos(t*sp+ph),sin(t*sp+ph))*ri;pd.y*=sq;
+    vec2 ps=vec2(0.,.5)+vec2(ca*pd.x-sa*pd.y,sa*pd.x+ca*pd.y);
+    float pr=.022+.022*h2(vec2(fi,4.)),dp=length(p-ps);
+    if(dp<pr){float band=sin((p.y-ps.y)/pr*6.+fi);
+      vec3 pc=mod(fi,3.)==1.?mix(rgb(60.,140.,170.),rgb(170.,222.,232.),.5+.5*band):mix(rgb(196.,116.,66.),rgb(242.,212.,160.),.5+.5*band);
+      vec3 n=vec3((p-ps)/pr,sqrt(max(1.-dp*dp/(pr*pr),0.)));
+      c=pc*(.3+.8*max(dot(n,normalize(vec3(vec2(0.,.5)-ps,.4))),0.));sky=0.;}
+    if(mod(fi,3.)==2.){float e=length((p-ps)*vec2(1.,2.8));
+      if(e>pr*1.35&&e<pr*2.1&&!(dp<pr&&p.y>ps.y)){c=mix(c,rgb(224.,204.,150.),.85);sky=0.;}}}
+  float sh=fract(t*.07);vec2 sc=vec2(-.8+sh*2.,.95-sh*.5);
+  float sd=length((p-sc)*mat2(.89,.45,-.45,.89)*vec2(.12,1.));
+  c+=vec3(1.)*smoothstep(.006,0.,sd)*step(sh,.35)*step(p.x,sc.x);
+  return vec4(c,sky);}`],
+
+  rays: ['A two-ink riso print of light rays bursting from the horizon under a crescent moon', `
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  vec3 ink=rgb(28.,56.,212.),pap=rgb(234.,222.,196.);
+  float t=u_time,H=.36,g=h2(cell),k,sky=1.;vec2 V=vec2(m.x*.5,H);
+  if(uv.y>H){vec2 d=p-V;float a=atan(d.x,d.y),dist=length(d);
+    float ray=noise(vec2(a*70.,.5))*.6+noise(vec2(a*23.,dist*2.-t*.2))*.55;
+    k=ray*smoothstep(1.15,0.,dist)*.95+.8*exp(-dist*6.)+(g-.5)*.4;
+    if(crescent(p,vec2(W()*.38,.86),.03)>0.){k=1.;sky=0.;}
+  }else{sky=0.;float z=1./max(H-uv.y,.004),x=(p.x-V.x)*z;
+    float s=noise(vec2(x*4.,z*.12+t*.5))*.7+noise(vec2(x*13.,z*.35+t*.5))*.5;
+    k=1.-smoothstep(.58,.66,s+(g-.5)*.25)-.8*exp(-(H-uv.y)*40.);}
+  return vec4(mix(ink,pap,step(.5,k)),sky);}`],
+
+  vortex: ['A two-ink riso print of the night sky swirling round a lone street lamp', `
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  vec3 ink=rgb(28.,56.,212.),pap=rgb(234.,222.,196.),blk=rgb(16.,16.,28.);
+  float t=u_time,g=h2(cell),sky=1.,k;vec2 C=vec2(m.x*.3,.5+m.y*.08),d=p-C;
+  float r=length(d),a=atan(d.y,d.x);
+  if(uv.y>.32){float sw=a+1.7/(r+.12)-t*.25;
+    float s=noise(vec2(sw*12.,r*3.))*.6+noise(vec2(sw*38.,r*9.))*.5;
+    k=s*smoothstep(1.,0.,r)*1.15+exp(-r*5.)*.7+(g-.5)*.4;
+    if(crescent(p,vec2(W()*.4,.88),.028)>0.){k=1.;sky=0.;}
+  }else{sky=0.;float z=1./max(C.y-uv.y,.004),x=(p.x-C.x)*z;
+    float s=noise(vec2(x*5.,z*.2+t*.3))*.7+noise(vec2(x*16.,z*.5))*.5;
+    k=1.-smoothstep(.6,.68,s+(g-.5)*.25);}
+  vec3 c=mix(ink,pap,step(.5,k));
+  if(box(p,vec2(C.x-.004,.3),vec2(C.x+.004,C.y-.02))+box(p,vec2(C.x-.014,C.y-.022),vec2(C.x+.014,C.y+.012))+tri(p,vec2(C.x,C.y+.01),.022,.024)>0.){c=blk;sky=0.;}
+  if(box(p,vec2(C.x-.008,C.y-.016),vec2(C.x+.008,C.y+.006))>0.)c=pap;
+  if(abs(uv.y-.3)<.004&&abs(p.x-C.x)<.07)c=blk;
+  return vec4(c,sky);}`],
+
+  train: ['The view from a train window, the countryside rushing past', `
+float ridge(float x,float a,float f,float o){return a*(.55*sin(x*f+o)+.3*sin(x*f*2.3+o*1.7)+.15*sin(x*f*5.1+o*.3));}
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,w=W(),sky=1.;
+  vec2 hs=vec2(min(w*.4,.78),.27),ce=vec2(0.,.56);
+  float sd=rbox(p,ce,hs,.07);
+  vec3 c=mix(rgb(96.,112.,104.),rgb(150.,166.,150.),uv.y*.8+.1);
+  if(sd<0.){sky=0.;
+    /* the carriage rattles: a soft sway plus a bump at every rail joint */
+    float bump=exp(-fract(t*1.4)*18.)*.006;
+    vec2 v=p-ce-m*vec2(.06,.05)+vec2(0.,sin(t*9.)*.0015+bump);
+    float y=v.y+.27,x=v.x;
+    c=mix(rgb(214.,232.,244.),rgb(122.,176.,228.),smoothstep(.15,.55,y));
+    float cl=fbm(vec2((x+t*.01)*2.5,y*6.));
+    if(cl>.62&&y>.32)c=mix(c,rgb(250.,252.,255.),smoothstep(.62,.75,cl));
+    float hm=.22+ridge(x+t*.02,.06,3.,1.);
+    if(y<hm){c=mix(rgb(150.,170.,196.),rgb(196.,210.,226.),smoothstep(hm-.1,hm,y));}
+    float hh=.15+ridge(x+t*.09,.035,5.,4.);
+    if(y<hh){c=mix(rgb(84.,130.,72.),rgb(120.,164.,92.),smoothstep(hh-.08,hh,y));
+      float tx=(x+t*.09)*30.,th=h2(vec2(floor(tx),2.));
+      if(th>.6&&tri(vec2(fract(tx),y),vec2(.5,hh-.01),.35,.03+.02*th)>0.)c=rgb(46.,86.,52.);}
+    if(y<.07){float g=noise(vec2((x+t*.6)*40.,y*30.));c=mix(rgb(96.,140.,60.),rgb(140.,176.,80.),g);
+      float fx=fract((x+t*.6)*9.);if(fx<.06&&y>.03)c=rgb(96.,76.,56.);
+      if(abs(y-.055)<.004)c=rgb(120.,96.,70.);}
+    /* telegraph poles flashing past, wires sagging between them */
+    float px=(x+t*1.6)*1.1,pf=fract(px);
+    float sag=.24-.05*4.*pf*(1.-pf);
+    if(pf<.035&&y<.27)c=rgb(40.,34.,30.);
+    if(abs(y-sag)<.0055||abs(y-sag+.03)<.0055)c=rgb(54.,48.,44.);
+    c=mix(c,rgb(240.,246.,250.),smoothstep(-.04,0.,sd)*.25);
+    c+=vec3(.06)*step(abs(v.x*.8+v.y-.18+m.x*.1),.025);
+  }else if(sd<.03){sky=0.;c=mix(rgb(230.,226.,214.),rgb(170.,164.,150.),smoothstep(0.,.03,sd));}
+  else c-=vec3(.08)*smoothstep(.1,.03,sd);
+  if(uv.y<.17){c=mix(rgb(120.,62.,48.),rgb(150.,82.,62.),step(.5,fract(p.x*14.)))*.9;sky=0.;}
+  if(abs(uv.y-.17)<.01){c=rgb(196.,178.,140.);sky=0.;}
+  return vec4(c,sky);}`],
+  poppies: ['A stormy sky over a field of red poppies blowing in the wind', `
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,H=.42,y=uv.y,sky=1.,wind=.7+m.x*1.6*u_hover;
+  float cl=fbm(vec2(p.x*1.6-t*.02,y*2.5));
+  vec3 c=mix(rgb(46.,60.,76.),rgb(118.,132.,142.),cl*1.15-.2);
+  c=mix(c,rgb(28.,36.,48.),smoothstep(.55,1.,y)*.55);
+  c=mix(c,rgb(255.,226.,170.),exp(-abs(y-H-.035)*16.)*(.55+.45*fbm(vec2(p.x*3.,1.)))*.95);
+  float hz=H+.01*sin(p.x*3.);
+  if(y<hz){sky=0.;float dep=(hz-y)/hz;
+    c=mix(rgb(72.,74.,58.),rgb(26.,30.,24.),dep);
+    c=mix(c,rgb(10.,14.,10.),step(.7,noise(vec2(p.x*110.+sin(y*40.+t*1.5)*2.*wind,y*14.)))*.55);
+    c=mix(c,rgb(160.,140.,100.),exp(-dep*14.)*.45);
+    for(int i=0;i<3;i++){float fi=float(i),cs=.025+fi*.045,y0=hz*(1.-fi*.34),y1=hz*(.66-fi*.34);
+      vec2 q=vec2(p.x+fi*3.1,y)/cs;q.y+=h2(vec2(floor(q.x),fi+4.));vec2 id=floor(q),f=fract(q);float h=h2(id+fi*11.);
+      vec2 o=vec2(.3+.4*h2(id+2.)+sin(t*1.6+id.x*.7)*.12*wind,.3+.4*h2(id+9.));
+      float dd=length((f-o)*vec2(1.,1.4));
+      if(y<y0+cs*.3&&y>y1-cs&&h>.25&&dd<.2+.16*h2(id+6.)){c=mix(rgb(176.,26.,22.),rgb(236.,80.,52.),smoothstep(.0,.3,f.y-o.y+.12));
+        if(dd<.07)c=rgb(30.,12.,12.);}}}
+  for(int i=0;i<2;i++){float fi=float(i),s=9.+fi*6.;vec2 q=cell/s;q.x-=t*(1.5+fi)*wind;q.y+=sin(q.x*.4+t)*.4;
+    vec2 id=floor(q),f=fract(q);if(h2(id+fi*5.)>.86&&length((f-.5)*s)<1.+fi*.6){c=rgb(214.,48.,36.);sky=0.;}}
+  return vec4(c,sky);}`],
+
+  castle: ['A pixel castle on a hill at night, with flickering windows and a flag in the wind', `
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,w=W(),y=uv.y,sky=1.;vec2 q=p+vec2(m.x*.04,0.);float x=q.x;
+  vec3 c=mix(rgb(44.,38.,96.),rgb(10.,12.,40.),smoothstep(.2,1.,y));
+  float s=h2(cell);if(s>.991&&y>.35)c+=vec3(.75)*(.5+.5*sin(t*2.+s*70.));
+  vec2 mc=vec2(w*.3+m.x*.02,.8);float md=length(p-mc);
+  c+=rgb(130.,116.,210.)*exp(-md*6.)*.55;
+  if(md<.08){c=mix(rgb(252.,242.,214.),rgb(212.,200.,180.),step(.6,fbm((p-mc)*30.)));sky=0.;}
+  float cd=fbm(vec2(p.x*2.-t*.03,y*5.))*smoothstep(.98,.6,y)*smoothstep(.45,.62,y);
+  if(cd>.4)c=mix(c,rgb(58.,52.,104.),.85);
+  if(y<.33+.05*sin(p.x*2.2+1.)+.04*fbm(vec2(p.x*3.,1.))){c=mix(rgb(52.,48.,108.),rgb(70.,64.,130.),fbm(p*8.)*.6);sky=0.;}
+  float hb=.24,cs=box(q,vec2(-.36,hb),vec2(.36,.42))+box(q,vec2(-.36,.42),vec2(.36,.445))*step(.5,fract((x+.36)/.03))
+    +box(q,vec2(-.17,hb),vec2(.17,.56))+box(q,vec2(-.17,.56),vec2(.17,.585))*step(.5,fract((x+.17)/.034))
+    +box(q,vec2(-.35,hb),vec2(-.25,.62))+box(q,vec2(.25,hb),vec2(.35,.62))+box(q,vec2(-.05,hb),vec2(.05,.72));
+  float roof=tri(q,vec2(-.3,.62),.066,.14)+tri(q,vec2(.3,.62),.066,.14)+tri(q,vec2(0.,.72),.07,.18);
+  if(cs>0.){sky=0.;c=rgb(14.,12.,34.);c=mix(c,rgb(90.,84.,160.),step(.92,fract(x/.05+.2))*step(0.,x)*.5);c=mix(c,rgb(58.,54.,110.),step(.8,fract(x/.05+.2))*.25);
+    vec2 wq=vec2(x/.05,y/.06),wid=floor(wq),wf=fract(wq);
+    if(abs(wf.x-.5)<.18&&abs(wf.y-.5)<.24&&y>.29&&y<.68){
+      float near=exp(-length(q-vec2((u_mouse.x-.5)*w,u_mouse.y))*6.)*u_hover;
+      float on=step(.45-near*.6,h2(wid))*step(.25,noise(vec2(t*1.5,wid.x+wid.y*7.)));
+      c=mix(c,mix(rgb(255.,190.,80.),rgb(255.,236.,160.),noise(vec2(t*6.,wid.x))),on);}}
+  if(roof>0.){c=mix(rgb(70.,28.,64.),rgb(110.,46.,86.),step(0.,x-floor(x/.2)*.2-.1)*.0+step(.5,fract(y/.025))*.25);sky=0.;}
+  if(box(q,vec2(-.003,.9),vec2(.003,.98))>0.){c=rgb(24.,22.,56.);sky=0.;}
+  float fy=.95+sin(x*40.-t*6.)*.008*(x/.08);
+  if(box(q,vec2(.003,fy),vec2(.08,fy+.026))>0.){c=mix(rgb(220.,60.,70.),rgb(255.,120.,110.),step(0.,sin(x*40.-t*6.)));sky=0.;}
+  if(y<.22+.07*cos(p.x*1.4)){c=mix(rgb(16.,16.,40.),rgb(30.,30.,64.),fbm(p*vec2(30.,60.))*.5);sky=0.;}
+  for(int i=0;i<2;i++){float fi=float(i),sz=14.+fi*8.;vec2 fq=cell/sz+vec2(t*.15,sin(t*.5+fi)*.3);vec2 id=floor(fq),f=fract(fq);
+    float h=h2(id+fi*3.);vec2 o=.5+.3*vec2(sin(t*1.3+h*20.),cos(t*1.1+h*30.));
+    if(h>.72&&y<.3&&length((f-o)*sz)<1.){c=rgb(220.,255.,140.)*(.6+.4*sin(t*4.+h*50.));sky=0.;}}
+  return vec4(c,sky);}`],
+
+  vista: ['An anime summer sky with tall clouds, a snowy peak and grass moving in the breeze', `
+vec4 scene(vec2 uv,vec2 p,vec2 cell,vec2 m){
+  float t=u_time,y=uv.y,sky=1.,w=W();
+  vec3 c=mix(rgb(176.,220.,240.),rgb(34.,122.,200.),smoothstep(.35,1.,y));
+  for(int i=0;i<5;i++){float fi=float(i),cx=mod(fi*.83+.2-t*.006*(1.+fi*.2)+m.x*.04,w+.8)-w*.5-.4;
+    vec2 cc=vec2(cx,.62+.07*sin(fi*2.3)),d=p-cc;
+    float r=.13+.05*h2(vec2(fi,2.)),blob=length(d*vec2(.62,1.))-r-.09*fbm(d*7.+fi*9.)+.05*smoothstep(0.,-.08,d.y);
+    if(blob<0.&&y>cc.y-.08){sky=0.;float top=clamp((d.y+.08)/(r+.1),0.,1.)+.25*fbm(d*12.)-.15*d.x/r;
+      c=top<.35?rgb(232.,166.,124.):top<.62?rgb(250.,214.,180.):rgb(255.,251.,244.);}}
+  float x=p.x+m.x*.03,pk=.4+.4*max(0.,1.-abs(x-.1)*2.)+.06*(ridged(vec2(x*5.,2.))-.5);
+  if(y<pk){sky=0.;float side=x-.1+.04*(fbm(vec2(y*12.,3.))-.5);
+    c=side<0.?rgb(150.,176.,206.):rgb(96.,128.,166.);
+    if(y>.58+.05*fbm(vec2(x*16.,1.))){c=side<0.?rgb(255.,255.,255.):rgb(196.,212.,234.);
+      if(fbm(vec2(x*40.,y*6.))>.62)c=mix(c,rgb(120.,146.,180.),.6);}
+    c=mix(c,rgb(176.,214.,236.),.3);}
+  float h1=.37+.04*fbm(vec2((p.x+m.x*.06)*3.,4.))+.02*sin(p.x*3.);
+  if(y<h1){sky=0.;c=mix(rgb(56.,118.,130.),rgb(118.,176.,184.),smoothstep(h1-.12,h1,y));}
+  float gx=p.x+m.x*.1,gh=.24+.04*sin(gx*2.)+.02*fbm(vec2(gx*6.,7.));
+  if(y<gh){sky=0.;float b=noise(vec2(gx*90.+sin(t*1.3+gx*4.)*(gh-y)*60.,y*10.));
+    c=mix(rgb(66.,136.,48.),rgb(156.,208.,88.),smoothstep(0.,gh,y)*.7+.3*b);
+    c=mix(c,rgb(38.,88.,40.),step(.7,b)*.6);
+    float rk=fbm(vec2(gx*5.,y*12.));if(rk>.64&&y<gh-.03)c=mix(rgb(176.,170.,150.),rgb(230.,224.,204.),step(.7,rk));}
+  return vec4(c,sky);}`]
+};
+
+/* the shared noise: 256 x 256 random values, made once per page */
+const SC_NOISE = { owner: {}, src: null, repeat: true };
+const scNoise = () => {
+  if (!SC_NOISE.src) {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const g = c.getContext('2d'), d = g.createImageData(256, 256);
+    for (let i = 0; i < d.data.length; i += 4) { d.data[i] = Math.random() * 256; d.data[i + 1] = Math.random() * 256; d.data[i + 2] = Math.random() * 256; d.data[i + 3] = 255; }
+    g.putImageData(d, 0, 0); SC_NOISE.src = c;
+  }
+  return SC_NOISE;
+};
+/* scenes call fbm() and noise(); point them at the texture versions */
+const scBody = k => (SC_HEAD + SC_KINDS[k][1]).replace(/\bfbm\(/g, 'tfbm(').replace(/\bnoise\(/g, 'tnoise(') + SC_TAIL;
+
+class PiixSceneElement extends GLStage {
+  static get observedAttributes() { return [...GLStage.observedAttributes, 'sky', 'fade', 'levels']; }
+  constructor() { super(); this._defPx = 4; this._defPal = 'mono'; this._introLen = 1; }
+  get kind() { const k = this.getAttribute('kind'); return k === 'porthole' ? 'train' : SC_KINDS[k] ? k : 'sakura'; }
+  _hostCss() { return (this.hasAttribute('fill') ? '' : 'width:100%;') + (this.hasAttribute('fill') || this.getAttribute('height') ? '' : 'height:480px;'); }
+  _setup() {
+    if (this.hasAttribute('fill')) this.setAttribute('aria-hidden', 'true');
+    else if (!this.hasAttribute('aria-label')) { this.setAttribute('role', 'img'); this.setAttribute('aria-label', SC_KINDS[this.kind][0]); }
+  }
+  _shader() { return scBody(this.kind); }
+  _texture() { return scNoise(); }
+  _uniforms() {
+    const fade = { top: 1, bottom: 2, both: 3 }[this.getAttribute('fade')] || 0;
+    return { u_j: [this.hasAttribute('palette') ? 1 : 0, clamp(+this.getAttribute('levels') || 6, 2, 16), 0, 0], u_k: [this.getAttribute('sky') === 'none' ? 1 : 0, fade, 0, .32] };
+  }
+}
+define('piix-scene', PiixSceneElement);
+ELEMENTS.scene = 'piix-scene';
+
+/* ---- gl/shader.js ---- */
+/* SHADER: GPU pixel backgrounds.   @component shader
+ *
+ *   <section>
+ *     <piix-shader kind="mesh" fill></piix-shader>
+ *     <h2>Your content sits on top</h2>
+ *   </section>
+ *
+ * Ten shaders running on the GPU, drawn on a pixel grid and dithered into the theme's colours:
+ * a drifting mesh gradient, domain-warped marble, an aurora, glowing crystal cells, liquid metal,
+ * a synthwave horizon, a nebula, topographic contour lines, a dot matrix that ripples from your
+ * pointer, and fire. The pointer bends each of them. With "fill" it sits behind the content of
+ * the element it's in.
+ *
+ *   kind      mesh | warp | aurora | crystal | liquid | horizon | nebula | topo | dots | fire
+ *   palette   lime | aurora | sunset | ocean | candy | violet | fire | gameboy | paper | mono,
+ *             or your own colours, dark to light: "#000,#6b4cff,#fff"
+ *   pixel     size of one pixel, in px                     default: 4
+ *   dither    0 for smooth bands, 1 for full dither         default: 1
+ *   speed     1 is normal, 0 holds still                    default: 1
+ *   height    when not filling: px or any CSS length       default: 360px
+ *   fill      sit behind the content of the parent element */
+const SH_KINDS = {
+  mesh: ['candy', `vec4 effect(vec2 uv,vec2 cell){
+    vec2 q=aspect(uv),m=aspect(u_mouse);float t=u_time*.22,v=0.,w=0.;
+    for(int i=0;i<5;i++){float fi=float(i);vec2 c=vec2(sin(t*(.7+fi*.13)+fi*1.7),cos(t*(.9+fi*.11)+fi*2.3))*vec2(.62,.4);
+      if(i==4)c=mix(c,m,u_hover*.85);float d=length(q-c),k=1./(d*d*7.+.3);v+=k*fi/4.;w+=k;}
+    v=v/w+(fbm(q*3.+t)-.5)*.14;return vec4(dpal(v,cell),1.);}`],
+  warp: ['aurora', `vec4 effect(vec2 uv,vec2 cell){
+    vec2 q=aspect(uv),m=aspect(u_mouse),p=q*2.2;float t=u_time*.1;
+    p+=normalize(q-m+.0001)*.35*exp(-length(q-m)*3.5)*u_hover;
+    vec2 a=vec2(fbm(p+vec2(0,t)),fbm(p+vec2(5.2,1.3)-t));
+    vec2 b=vec2(fbm(p+4.*a+vec2(1.7,9.2)+t*.7),fbm(p+4.*a+vec2(8.3,2.8)-t*.5));
+    float v=fbm(p+4.*b)*1.3-.12+length(b)*.12;return vec4(dpal(v,cell),1.);}`],
+  aurora: ['aurora', `vec4 effect(vec2 uv,vec2 cell){
+    vec2 q=aspect(uv),m=aspect(u_mouse);float t=u_time*.3,v=.06*(1.-uv.y);
+    for(int i=0;i<3;i++){float fi=float(i),x=q.x*1.3+fi*.7;
+      float yc=.64-fi*.13+.08*sin(x*2.+t+fi)+.06*fbm(vec2(x*2.,t*.5+fi))+.06*exp(-length(q-m)*4.)*u_hover;
+      float d=uv.y-yc,band=exp(-d*d*(d>0.?22.:220.));band*=.72+.28*sin(x*14.+t*1.5+fbm(vec2(x*5.,t))*5.);v+=band*(.8-fi*.2);}
+    float s=hash(cell);if(s>.994)v+=.55*(.5+.5*sin(u_time*3.+s*40.));return vec4(dpal(v,cell),1.);}`],
+  crystal: ['violet', `vec4 effect(vec2 uv,vec2 cell){
+    vec2 q=aspect(uv),m=aspect(u_mouse),p=q*4.,i=floor(p),f=fract(p),id=vec2(0.);float d1=8.,d2=8.;
+    for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 g=vec2(float(x),float(y)),o=vec2(hash(i+g),hash(i+g+19.));
+      o=.5+.45*sin(u_time*.5+6.2831*o);float d=length(g+o-f);if(d<d1){d2=d1;d1=d;id=i+g;}else if(d<d2)d2=d;}
+    float e=d2-d1,v=.15+.45*hash(id)*(.6+.4*sin(u_time+hash(id)*9.));v=mix(v,1.,smoothstep(.09,.0,e));
+    v+=.45*exp(-length(q-m)*4.)*u_hover*(1.-smoothstep(.0,.3,e));return vec4(dpal(v,cell),1.);}`],
+  liquid: ['mono', `vec4 effect(vec2 uv,vec2 cell){
+    vec2 q=aspect(uv),m=aspect(u_mouse);float f=0.;
+    for(int i=0;i<6;i++){float fi=float(i);vec2 c=vec2(sin(u_time*.45*(1.+fi*.17)+fi*2.1)*.6,cos(u_time*.4*(1.+fi*.13)+fi*1.3)*.33);f+=.03/dot(q-c,q-c);}
+    f+=.05/dot(q-m,q-m)*u_hover;
+    float v=f>1.?.3+.62*(.5+.5*sin(uv.y*8.+q.x*1.2+clamp(f,1.,3.)*1.1-u_time*.5))*(.75+.25*smoothstep(1.,2.,f)):.05+.08*uv.y+.12*smoothstep(.55,1.,f);return vec4(dpal(v,cell),1.);}`],
+  horizon: ['sunset', `vec4 effect(vec2 uv,vec2 cell){
+    vec2 q=aspect(uv),m=aspect(u_mouse);float hz=.42,v;
+    if(uv.y>hz){v=.12+.45*(1.-(uv.y-hz)/(1.-hz));vec2 s=vec2(q.x-m.x*.15*u_hover,uv.y-(hz+.21));
+      if(length(s)<.22&&!(s.y<0.&&fract(s.y*16.+u_time*.35)<(-s.y/.22)*.7))v=.75+s.y*1.1;
+      float st=hash(cell);if(st>.993&&uv.y>.7)v=.7;}
+    else{float z=.11/(hz-uv.y+.003),gx=q.x*z;
+      float line=max(step(.9,fract(z*.9-u_time*.8)),step(.88,1.-abs(fract(gx*1.4)-.5)*2.));
+      v=line*.8*smoothstep(0.,.04,hz-uv.y)+.05+.45*exp(-(hz-uv.y)*22.);}
+    return vec4(dpal(v,cell),1.);}`],
+  nebula: ['candy', `vec4 effect(vec2 uv,vec2 cell){
+    vec2 q=aspect(uv),m=aspect(u_mouse),p=q*1.7+vec2(u_time*.02,0.);
+    float n=fbm(p*1.4+fbm(p*2.2+u_time*.04)*1.6),v=pow(n,2.2)*1.5+.02+.3*exp(-length(q-m)*5.)*u_hover;
+    float s=hash(cell);if(s>.992)v=max(v,.6+.4*sin(u_time*3.+s*50.));return vec4(dpal(v,cell),1.);}`],
+  topo: ['paper', `vec4 effect(vec2 uv,vec2 cell){
+    vec2 q=aspect(uv),m=aspect(u_mouse);float h=fbm(q*2.+vec2(0.,u_time*.06))+.35*exp(-length(q-m)*3.)*u_hover;
+    float l=abs(fract(h*7.)-.5),major=abs(fract(h*1.75)-.5);
+    float v=.04+h*.1+smoothstep(.13,.02,l)*.55+smoothstep(.06,.0,major)*.4;return vec4(dpal(v,cell),1.);}`],
+  dots: ['lime', `vec4 effect(vec2 uv,vec2 cell){
+    vec2 g=floor(cell/4.),c=(g*4.+2.)/u_res,cq=aspect(c),m=aspect(u_mouse);float d=length(cq-m);
+    float v=.1+.32*fbm(g*.12+u_time*.15)+u_hover*(.5+.5*sin(d*28.-u_time*5.))*exp(-d*2.5)*.75;
+    vec2 f=mod(cell,4.);float on=step(f.x,2.)*step(f.y,2.)*step(.5,f.x)*step(.5,f.y);
+    return vec4(dpal(v*on,cell),1.);}`],
+  fire: ['fire', `vec4 effect(vec2 uv,vec2 cell){
+    vec2 q=aspect(uv),m=aspect(u_mouse),p=vec2(q.x*3.,uv.y*2.2-u_time*1.1);
+    float v=(1.-uv.y)*1.3-fbm(p)*.65+.2*fbm(p*2.3)+.4*exp(-length(q-m)*5.)*u_hover;
+    return vec4(dpal(pow(clamp(v,0.,1.),1.5),cell),1.);}`]
+};
+class PiixShaderElement extends GLStage {
+  get kind() { const k = this.getAttribute('kind'); return SH_KINDS[k] ? k : 'mesh'; }
+  get _defPal() { return SH_KINDS[this.kind][0]; }
+  _hostCss() { return (this.hasAttribute('fill') ? '' : 'width:100%;') + (this.hasAttribute('fill') || this.getAttribute('height') ? '' : 'height:360px;'); }
+  _setup() { if (!this.hasAttribute('aria-label') && !this.hasAttribute('fill')) { this.setAttribute('role', 'img'); this.setAttribute('aria-label', `An animated ${this.kind} background`); } if (this.hasAttribute('fill')) this.setAttribute('aria-hidden', 'true'); }
+  _shader() { return SH_KINDS[this.kind][1]; }
+}
+define('piix-shader', PiixShaderElement);
+ELEMENTS.shader = 'piix-shader';
+
+/* ---- gl/slider.js ---- */
+/* SLIDER: a range input whose track is lit on the GPU.   @component slider
+ *
+ *   <piix-slider name="volume" value="40">Volume</piix-slider>
+ *
+ * The filled part of the track glows through the palette with a slow shimmer; the head is a
+ * bright pixel block with a halo, and dragging it fast throws sparks behind it. While you drag
+ * (or have it focused) its value floats above the head. Whatever you put inside is its label.
+ * A real slider: arrow keys, Page Up/Down, Home and End move it, screen readers hear it, and it
+ * sends its value with the form it's in.
+ *
+ *   value, min, max, step                                  default: 50, 0, 100, 1
+ *   name      the form field name
+ *   suffix    shown after the value, like % or px
+ *   palette   the colours of the light                    default: lime
+ *   pixel     size of one pixel, px                       default: 3
+ *   disabled
+ *
+ *   events: input, change */
+const SL_SHADER = `vec4 effect(vec2 uv,vec2 cell){
+  float f=u_k.x,sp=u_k.y,mid=abs(uv.y-.5)*2.,hx=(uv.x-f)*u_res.x;
+  vec4 c=vec4(0.);
+  if(mid<.45){
+    if(uv.x<f){float v=.35+.45*uv.x/max(f,.01)+.12*sin(cell.x*.5-u_time*6.);c=vec4(dpal(v,cell),1.);}
+    else c=vec4(dpal(.07+.07*step(mod(cell.x,6.),.5)*step(mid,.2),cell),1.);}
+  float g=exp(-abs(hx)*.22)*(1.-mid*.8)*(.35+.65*u_hover);
+  if(c.a==0.&&g>bayer8(cell)*.8+.03)c=vec4(dpal(.75,cell),1.);
+  if(hx<0.&&sp>.02&&hash(floor(cell/1.)+floor(u_time*24.))>1.-sp*.5*exp(hx*.08)&&mid<.95)c=vec4(dpal(1.,cell),1.);
+  if(abs(hx)<2.5&&mid<.95)c=vec4(dpal(.92+.08*u_hover,cell),1.);
+  return c;}`;
+class PiixSliderElement extends GLStage {
+  static get formAssociated() { return true; }
+  static get observedAttributes() { return [...GLStage.observedAttributes, 'value', 'min', 'max', 'step', 'disabled', 'suffix']; }
+  constructor() { super(); this._defPx = 3; this._defPal = 'lime'; this._int = this.attachInternals ? this.attachInternals() : null; this._f = -1; this._sp = 0; }
+  attributeChangedCallback(n, a, b) {
+    if (n === 'value' || n === 'min' || n === 'max' || n === 'step' || n === 'suffix') { if (this._track) this._sync(); return; }
+    super.attributeChangedCallback(n, a, b);
+  }
+  get min() { return +this.getAttribute('min') || 0; }
+  get max() { return this.hasAttribute('max') ? +this.getAttribute('max') : 100; }
+  get step() { return +this.getAttribute('step') || 1; }
+  get value() { const v = this.hasAttribute('value') ? +this.getAttribute('value') : (this.min + this.max) / 2; return clamp(v, this.min, this.max); }
+  set value(v) { this.setAttribute('value', this._snap(v)); }
+  _snap(v) { const s = this.step, d = (String(s).split('.')[1] || '').length; return +clamp(Math.round((v - this.min) / s) * s + this.min, this.min, this.max).toFixed(d); }
+  _hostCss() { return 'display:block'; }
+  _css() {
+    const l = this._pal.list;
+    return `label{display:flex;justify-content:space-between;margin-bottom:10px;font:400 12px/1 ${KIT_FONT};text-transform:uppercase;letter-spacing:.06em;opacity:.8}
+.track{position:relative;height:30px;cursor:pointer;touch-action:none;outline:none}
+.track:focus-visible{outline:2px dashed ${l[l.length - 2]};outline-offset:6px}
+.val{position:absolute;bottom:calc(100% + 8px);transform:translateX(-50%);padding:5px 7px 6px;background:${l[l.length - 1]};color:${l[0]};font:400 11px/1 ${KIT_FONT};clip-path:${kitCorners(2)};opacity:0;transition:opacity .15s;pointer-events:none;white-space:nowrap}
+.track.live .val{opacity:1}
+:host([disabled]){opacity:.45;pointer-events:none}`;
+  }
+  _html() { return '<label part="label"><span><slot></slot></span><output part="output"></output></label><div class="track" role="slider" tabindex="0" part="track"><canvas aria-hidden="true"></canvas><span class="val" aria-hidden="true"></span></div>'; }
+  _box() { return this.shadowRoot.querySelector('.track'); }
+  _setup() {
+    const t = this._track = this._box();
+    if (this._initial === undefined) this._initial = this.getAttribute('value');
+    t.setAttribute('aria-label', this.textContent.trim() || this.getAttribute('name') || 'Value');
+    const at = e => { const r = t.getBoundingClientRect(); return this.min + clamp((e.clientX - r.left) / r.width, 0, 1) * (this.max - this.min); };
+    const set = (v, fire) => { const was = this.value; this.value = v; if (this.value !== was) this.dispatchEvent(new Event('input', { bubbles: true, composed: true })); if (fire) this.dispatchEvent(new Event('change', { bubbles: true })); };
+    t.addEventListener('pointerdown', e => { if (this.hasAttribute('disabled')) return; t.setPointerCapture(e.pointerId); this._drag = true; t.classList.add('live'); set(at(e)); t.focus(); });
+    t.addEventListener('pointermove', e => { if (this._drag) set(at(e)); });
+    const up = () => { if (!this._drag) return; this._drag = false; if (document.activeElement !== this) t.classList.remove('live'); this.dispatchEvent(new Event('change', { bubbles: true })); };
+    t.addEventListener('pointerup', up); t.addEventListener('pointercancel', up);
+    t.addEventListener('focus', () => t.classList.add('live'));
+    t.addEventListener('blur', () => { if (!this._drag) t.classList.remove('live'); });
+    t.addEventListener('keydown', e => {
+      const s = this.step, big = Math.max(s, (this.max - this.min) / 10);
+      const v = { ArrowRight: this.value + s, ArrowUp: this.value + s, ArrowLeft: this.value - s, ArrowDown: this.value - s, PageUp: this.value + big, PageDown: this.value - big, Home: this.min, End: this.max }[e.key];
+      if (v == null) return;
+      e.preventDefault(); set(v, true);
+    });
+    this._sync();
+  }
+  _sync() {
+    const t = this._track, v = this.value, sfx = this.getAttribute('suffix') || '', k = (v - this.min) / ((this.max - this.min) || 1);
+    t.setAttribute('aria-valuemin', this.min); t.setAttribute('aria-valuemax', this.max); t.setAttribute('aria-valuenow', v); t.setAttribute('aria-valuetext', v + sfx);
+    this.shadowRoot.querySelector('output').textContent = v + sfx;
+    const val = this.shadowRoot.querySelector('.val'); val.textContent = v + sfx; val.style.left = (k * 100) + '%';
+    if (this._int) this._int.setFormValue(String(v));
+  }
+  formResetCallback() { this._initial == null ? this.removeAttribute('value') : this.setAttribute('value', this._initial); }
+  _shader() { return SL_SHADER; }
+  _uniforms(T, dt) {
+    /* the head eases to the value; how fast it moved makes the sparks */
+    const k = (this.value - this.min) / ((this.max - this.min) || 1);
+    if (this._f < 0 || reduced()) this._f = k;
+    const was = this._f; this._f = lerp(this._f, k, Math.min(1, dt * 14));
+    this._sp = lerp(this._sp, Math.min(1, Math.abs(this._f - was) / Math.max(dt, .001) * .6), .3);
+    return { u_k: [this._f, this._sp, 0, 0], u_hover: Math.max(this._hov, this._drag ? 1 : 0) };
+  }
+}
+define('piix-slider', PiixSliderElement);
+ELEMENTS.slider = 'piix-slider';
+
+/* ---- gl/stat.js ---- */
+/* STAT: a big number that counts up in pixel type when it scrolls into view.   @component stat
+ *
+ *   <piix-stat value="12480" suffix="+">teams use it</piix-stat>
+ *
+ * The number rolls up from zero the first time it's on screen, in chunky pixel digits with a hard
+ * shadow, and each digit flickers as it changes. Whatever you put inside is the label under it.
+ * Screen readers get the final number straight away.
+ *
+ *   value     the number
+ *   prefix    before it, like $
+ *   suffix    after it, like + or %
+ *   decimals  digits after the point                       default: 0
+ *   duration  seconds to count                             default: 1.6
+ *   tone      lime | coral | violet | sky | sun | mint | ink | paper   default: lime */
+class PiixStatElement extends HTMLElement {
+  static get observedAttributes() { return ['value', 'prefix', 'suffix', 'decimals', 'tone']; }
+  constructor() { super(); this.attachShadow({ mode: 'open' }); this._tick = this._tick.bind(this); }
+  connectedCallback() {
+    this._build();
+    this._io = new IntersectionObserver(es => { if (es[es.length - 1].isIntersecting && !this._t0) { this._t0 = now(); sub(this._tick); this._io.disconnect(); } }, { threshold: .4 });
+    this._io.observe(this);
+  }
+  disconnectedCallback() { unsub(this._tick); if (this._io) this._io.disconnect(); }
+  attributeChangedCallback() { if (this.shadowRoot.firstChild) { this._build(); if (this._t0) { this._t0 = now(); sub(this._tick); } } }
+  _fmt(n) { const d = +this.getAttribute('decimals') || 0; return (this.getAttribute('prefix') || '') + n.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }) + (this.getAttribute('suffix') || ''); }
+  _build() {
+    const [c] = kitTone(this), v = +this.getAttribute('value') || 0;
+    this.shadowRoot.innerHTML = `<style>
+:host{display:inline-block;color:inherit}
+.n{font:400 clamp(40px,6vw,72px)/1 ${KIT_FONT};color:${c};letter-spacing:.02em;text-shadow:4px 4px 0 #17121f;white-space:nowrap;font-variant-numeric:tabular-nums}
+.n i{font-style:normal;display:inline-block}
+.n i.f{animation:fl .12s steps(2)}
+@keyframes fl{50%{opacity:.35;transform:translateY(-2px)}}
+.l{margin-top:10px;font:600 14px/1.3 "Bricolage Grotesque",system-ui,sans-serif;opacity:.75}
+@media (prefers-reduced-motion:reduce){.n i.f{animation:none}}
+</style><div class="n" part="number" aria-hidden="true"></div><div class="l" part="label"><slot></slot></div>`;
+    this._n = this.shadowRoot.querySelector('.n');
+    this.setAttribute('role', 'figure');
+    this.setAttribute('aria-label', `${this._fmt(v)} ${this.textContent.trim()}`.trim());
+    this._show(this._t0 && !reduced() ? 0 : (this._t0 || reduced() ? v : 0));
+  }
+  /* draw the number, flickering any digit that changed */
+  _show(n) {
+    const s = this._fmt(n), old = this._s || '';
+    this._n.innerHTML = [...s].map((ch, i) => `<i${ch !== old[i] && old ? ' class="f"' : ''}>${ch.replace(/[<>&]/g, '')}</i>`).join('');
+    this._s = s;
+  }
+  _tick() {
+    const v = +this.getAttribute('value') || 0, dur = (+this.getAttribute('duration') || 1.6) * 1000, k = reduced() ? 1 : clamp((now() - this._t0) / dur, 0, 1);
+    const e = 1 - Math.pow(1 - k, 3), d = +this.getAttribute('decimals') || 0, n = Math.round(v * e * 10 ** d) / 10 ** d;
+    if (this._fmt(n) !== this._s) this._show(n);
+    if (k >= 1) unsub(this._tick);
+  }
+}
+define('piix-stat', PiixStatElement);
+ELEMENTS.stat = 'piix-stat';
+
+/* ---- gl/tabs.js ---- */
+/* TABS: tabs whose highlight slides across with a dithered pixel trail.   @component tabs
+ *
+ *   <piix-tabs>
+ *     <div label="Overview">…</div>
+ *     <div label="Install">…</div>
+ *     <div label="Examples">…</div>
+ *   </piix-tabs>
+ *
+ * Each child with a label becomes a tab. Pick one and the lit block slides over to it on the
+ * GPU, leaving a trail of dithered pixels behind. Arrow keys, Home and End move between tabs,
+ * and it's announced as a proper tab list.
+ *
+ *   selected  which tab is open, from 0                     default: 0
+ *   palette   the colours of the highlight                 default: lime
+ *   pixel     size of one pixel, px                        default: 3
+ *
+ *   events: change { index, label } */
+const TB_SHADER = `vec4 effect(vec2 uv,vec2 cell){
+  float x0=u_k.x,x1=u_k.y,vel=u_k.z,inb=step(x0,uv.x)*step(uv.x,x1),tr=0.;
+  if(vel>.001)tr=clamp(1.-(x0-uv.x)/(vel*.5),0.,1.)*step(uv.x,x0);
+  if(vel<-.001)tr=clamp(1.-(uv.x-x1)/(-vel*.5),0.,1.)*step(x1,uv.x);
+  float v=inb>0.?.7+.3*uv.y:tr*.55;
+  if(max(inb,tr)<.02)return vec4(0.);
+  return vec4(dpal(v,cell),step(bayer8(cell)*.98,max(inb,tr)));}`;
+class PiixTabsElement extends GLStage {
+  static get observedAttributes() { return [...GLStage.observedAttributes, 'selected']; }
+  constructor() { super(); this._defPx = 3; this._defPal = 'lime'; this._defDither = .5; this._x = [0, 0]; this._v = 0; }
+  attributeChangedCallback(n, a, b) { if (n === 'selected') { if (this._tabs) this._pick(this.selected, false); return; } super.attributeChangedCallback(n, a, b); }
+  _hostCss() { return 'display:block'; }
+  _css() {
+    return `.bar{position:relative;display:flex;gap:4px;padding:6px;background:#17121f;clip-path:${kitCorners(3)}}
+.bar canvas{z-index:0}
+[role=tab]{all:unset;position:relative;z-index:1;flex:0 0 auto;padding:10px 16px;font:400 13px/1 ${KIT_FONT};text-transform:uppercase;letter-spacing:.05em;color:#cdc6da;cursor:pointer;transition:color .15s}
+[role=tab][aria-selected=true]{color:#17121f}
+[role=tab]:focus-visible{outline:2px dashed #cdc6da;outline-offset:2px}
+.panels{padding:18px 4px}`;
+  }
+  _html() { return '<div class="bar" role="tablist" part="tablist"><canvas aria-hidden="true"></canvas></div><div class="panels" part="panels"><slot></slot></div>'; }
+  _box() { return this.shadowRoot.querySelector('.bar'); }
+  get selected() { return clamp(+this.getAttribute('selected') || 0, 0, Math.max(0, this._tabs ? this._tabs.length - 1 : 0)); }
+  _setup() {
+    const bar = this._box(), kids = [...this.children].filter(c => c.hasAttribute('label'));
+    this._kids = kids;
+    this._tabs = kids.map((k, i) => {
+      const b = document.createElement('button');
+      b.setAttribute('role', 'tab'); b.type = 'button'; b.textContent = k.getAttribute('label');
+      b.addEventListener('click', () => this._pick(i, true));
+      b.addEventListener('keydown', e => {
+        const n = kids.length, j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: n - 1 }[e.key];
+        if (j != null) { e.preventDefault(); this._pick((j + n) % n, true); this._tabs[(j + n) % n].focus(); }
+      });
+      bar.appendChild(b);
+      k.setAttribute('role', 'tabpanel'); k.setAttribute('aria-label', k.getAttribute('label'));
+      return b;
+    });
+    this._pick(this.selected, false);
+  }
+  _pick(i, user) {
+    this._tabs.forEach((b, j) => { b.setAttribute('aria-selected', String(i === j)); b.tabIndex = i === j ? 0 : -1; });
+    this._kids.forEach((k, j) => { k.hidden = i !== j; });
+    if (user && i !== this.selected) {
+      this.setAttribute('selected', i);
+      this.dispatchEvent(new CustomEvent('change', { bubbles: true, detail: { index: i, label: this._kids[i].getAttribute('label') } }));
+    }
+  }
+  _shader() { return TB_SHADER; }
+  _uniforms(T, dt) {
+    /* the block eases toward the selected tab; how fast it moves draws the trail */
+    const bar = this._box(), b = this._tabs[this.selected];
+    if (!b) return {};
+    const W = bar.offsetWidth || 1, want = [b.offsetLeft / W, (b.offsetLeft + b.offsetWidth) / W], k = reduced() ? 1 : Math.min(1, dt * 9), was = this._x[0];
+    if (!this._init) { this._x = want.slice(); this._init = true; }
+    this._x[0] = lerp(this._x[0], want[0], k); this._x[1] = lerp(this._x[1], want[1], k);
+    this._v = lerp(this._v, (this._x[0] - was) / Math.max(dt, .001) * .1, .5);
+    return { u_k: [this._x[0], this._x[1], this._v, 0] };
+  }
+}
+define('piix-tabs', PiixTabsElement);
+ELEMENTS.tabs = 'piix-tabs';
+
+/* ---- gl/text.js ---- */
+/* TEXT: headlines with GPU pixel effects.   @component text
+ *
+ *   <h1><piix-text effect="shine">Pixel perfect</piix-text></h1>
+ *
+ * The words are drawn into a texture and run through a shader, on a pixel grid, in the palette:
+ * a dithered colour sweep, a mosaic that resolves when it scrolls into view, a glitch with
+ * colour split and slipping rows, a wave, a melt that drips, and a scanline. It takes the size,
+ * font and weight of wherever you put it, and the real words stay in the page for screen
+ * readers, search and copy-paste. One line of text.
+ *
+ *   effect    shine | reveal | glitch | wave | melt | scan        default: shine
+ *   palette   the colours                                       default: lime
+ *   pixel     size of one pixel, px                             default: 2 */
+const TX_FX = { shine: 0, reveal: 1, glitch: 2, wave: 3, melt: 4, scan: 5 };
+const TX_SHADER = `float A(vec2 p){if(p.x<0.||p.y<0.||p.x>1.||p.y>1.)return 0.;return texture2D(u_tex,p).a;}
+vec4 effect(vec2 uv,vec2 cell){
+  float fx=u_k.x,t=u_time,a,v=fract(uv.x*.7-uv.y*.25-t*.18);vec2 p=uv;
+  if(fx==1.){float b=mix(.09,0.,u_intro*u_intro);if(b>.001)p=(floor(uv/vec2(b*u_res.y/u_res.x,b))+.5)*vec2(b*u_res.y/u_res.x,b);}
+  if(fx==3.){p.y+=sin(uv.x*9.+t*3.)*.09;p.x+=sin(uv.y*7.+t*2.)*.006;}
+  if(fx==4.){float col=floor(uv.x*u_res.x/3.),d=max(0.,sin(t*.7+hash(vec2(col,1.))*6.2831))*hash(vec2(col,7.))*.5;p.y+=d*uv.y;}
+  if(fx==2.){float g=step(.8,hash(vec2(floor(t*7.),3.)))+u_hover*.6,row=floor(uv.y*12.);
+    p.x+=(hash(vec2(row,floor(t*15.)))-.5)*.08*g;float s=.012*g+.004;
+    float r=A(p+vec2(s,0.)),gg=A(p),b=A(p-vec2(s,0.));a=max(r,max(gg,b));if(a<.5)return vec4(0.);
+    vec3 c=dpal(.55+.45*gg,cell);return vec4(vec3(r>.5?c.r:.15,gg>.5?c.g:.1,b>.5?c.b:.35)*1.,1.);}
+  a=A(p);if(a<.5)return vec4(0.);
+  if(fx==5.){float sc=fract(uv.y*.9-t*.35);v=.35+.65*smoothstep(.12,0.,abs(sc-.5)-.02)+.12*step(.5,fract(cell.y*.5));}
+  if(fx==1.)v=.55+.45*uv.y;
+  v+=.25*exp(-length(aspect(uv)-aspect(u_mouse))*4.)*u_hover;
+  return vec4(dpal(.5+.5*v,cell),1.);}`;
+class PiixTextElement extends GLStage {
+  constructor() { super(); this._defPx = 2; this._defPal = 'lime'; this._texCv = document.createElement('canvas'); this._texDirty = true; }
+  get effect() { const e = this.getAttribute('effect'); return e in TX_FX ? e : 'shine'; }
+  _hostCss() { return 'display:inline-block;position:relative;color:transparent;white-space:nowrap;padding:0 .04em;-webkit-text-fill-color:transparent'; }
+  _html() { return '<slot></slot><canvas aria-hidden="true"></canvas>'; }
+  _setup() {
+    this._introLen = this.effect === 'reveal' ? 1.4 : 0;
+    if (!this._mo) { this._mo = new MutationObserver(() => { this._texDirty = true; }); this._mo.observe(this, { characterData: true, childList: true, subtree: true }); }
+    if (document.fonts) document.fonts.ready.then(() => { this._texDirty = true; });
+  }
+  _resized() { this._texDirty = true; }
+  /* the words, in white, at full resolution, where the browser laid them out */
+  _texture() {
+    const r = this.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2), w = Math.max(2, Math.round(r.width * dpr)), h = Math.max(2, Math.round(r.height * dpr));
+    if (this._texDirty || this._texCv.width !== w || this._texCv.height !== h) {
+      const c = this._texCv, x = c.getContext('2d'), cs = getComputedStyle(this);
+      c.width = w; c.height = h; x.clearRect(0, 0, w, h);
+      x.font = `${cs.fontStyle} ${cs.fontWeight} ${parseFloat(cs.fontSize) * dpr}px ${cs.fontFamily}`;
+      x.letterSpacing = cs.letterSpacing === 'normal' ? '0px' : (parseFloat(cs.letterSpacing) * dpr) + 'px';
+      x.textBaseline = 'middle'; x.fillStyle = '#fff';
+      x.fillText(this.textContent.trim(), parseFloat(cs.paddingLeft) * dpr, h / 2 + parseFloat(cs.fontSize) * dpr * .04);
+      this._texDirty = 'upload';
+    }
+    const t = { owner: this, src: this._texCv, dirty: this._texDirty === 'upload' };
+    this._texDirty = false;
+    return t;
+  }
+  _shader() { return TX_SHADER; }
+  _uniforms() { return { u_k: [TX_FX[this.effect], 0, 0, 0] }; }
+}
+define('piix-text', PiixTextElement);
+ELEMENTS.text = 'piix-text';
+
+/* ---- gl/toast.js ---- */
+/* TOAST: notifications with a pixel fuse that burns down while they're up.   @component toast
+ *
+ *   Piixpal.toast('Saved');
+ *   Piixpal.toast('Deploy finished', { tone: 'ok', title: 'Production', action: { label: 'Open', onClick } });
+ *   Piixpal.toast('Card declined', { tone: 'error' });
+ *
+ * Toasts slide in from the corner in a few chunky steps. Along the bottom, a thin pixel fuse
+ * burns down with a flickering spark at its tip; when it runs out the toast wipes away. Hover
+ * (or focus) one and the fuse stops. They stack, newest nearest the corner, and screen readers
+ * hear them (errors straight away, the rest politely).
+ *
+ * Put a <piix-toaster> on the page to choose where and how they appear; one is added for you
+ * otherwise.
+ *
+ *   options   tone: info | ok | warn | error      title      duration (seconds, 0 = stay)
+ *             action: { label, onClick }
+ *   toaster   position: bottom-right | bottom-left | top-right | top-left | bottom | top
+ *             theme: dark | light
+ *
+ *   returns   { close() } */
+const TOAST_TONES = {
+  info: ['#58c8ff', '<path d="M3 1h2v1H3zM3 3h2v4H3z"/>'],
+  ok: ['#9be15d', '<path d="M6 1h1v2H6zM5 3h1v1H5zM4 4h1v1H4zM1 4h1v1H1zM2 5h1v1H2zM3 6h1v1H3z"/>'],
+  warn: ['#ffcc55', '<path d="M3 1h2v4H3zM3 6h2v1H3z"/>'],
+  error: ['#ff6b5e', '<path d="M1 1h2v1H1zM5 1h2v1H5zM2 2h1v1H2zM5 2h1v1H5zM3 3h2v2H3zM2 5h1v1H2zM5 5h1v1H5zM1 6h2v1H1zM5 6h2v1H5z"/>']
+};
+class PiixToasterElement extends HTMLElement {
+  static get observedAttributes() { return ['position', 'theme']; }
+  constructor() { super(); this.attachShadow({ mode: 'open' }); }
+  connectedCallback() { this._build(); }
+  attributeChangedCallback() { if (this.shadowRoot.firstChild) this._build(); }
+  _build() {
+    const pos = this.getAttribute('position') || 'bottom-right', top = pos.startsWith('top'), light = this.getAttribute('theme') === 'light';
+    const x = pos.endsWith('left') ? 'left:16px' : pos === 'top' || pos === 'bottom' ? 'left:50%;transform:translateX(-50%)' : 'right:16px';
+    const keep = this._list ? [...this._list.children] : [];
+    this.shadowRoot.innerHTML = `<style>
+:host{position:fixed;z-index:2147483000;${top ? 'top' : 'bottom'}:16px;${x};pointer-events:none}
+ol{display:flex;flex-direction:${top ? 'column' : 'column-reverse'};gap:10px;margin:0;padding:0;list-style:none;width:min(380px,calc(100vw - 32px));filter:drop-shadow(0 10px 22px rgba(0,0,0,.3))}
+li{--tone:#58c8ff;position:relative;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;padding:14px 14px 18px;pointer-events:auto;
+  background:${light ? '#fbf8f2' : '#17121f'};color:${light ? '#17121f' : '#f2eef8'};box-shadow:inset 0 0 0 2px ${light ? '#17121f' : '#2c2438'};
+  clip-path:${kitCorners(3)};font:400 14.5px/1.45 "Bricolage Grotesque",system-ui,sans-serif;animation:tin .28s steps(4) both}
+li.out{animation:tout .3s steps(4) forwards}
+@keyframes tin{from{transform:translateX(${pos.endsWith('left') ? '-' : ''}40px);opacity:0}}
+@keyframes tout{to{clip-path:inset(0 0 0 100%);opacity:.3}}
+.ico{width:22px;height:22px;display:grid;place-items:center;background:var(--tone);color:#17121f;clip-path:${kitCorners(2)}}
+.ico svg{width:12px;height:12px;shape-rendering:crispEdges}
+b{display:block;font-weight:650;font-size:15px;line-height:1.3}
+.msg{opacity:${light ? '.75' : '.8'}}
+.act{all:unset;margin-top:8px;display:inline-block;font-weight:650;font-size:13.5px;color:var(--tone);cursor:pointer;border-bottom:2px solid currentColor}
+.act:focus-visible,.x:focus-visible{outline:2px dashed var(--tone);outline-offset:3px}
+.x{all:unset;width:22px;height:22px;display:grid;place-items:center;font:400 11px/1 ${KIT_FONT};opacity:.5;cursor:pointer}
+.x:hover{opacity:1}
+.fuse{position:absolute;left:14px;right:14px;bottom:8px;height:3px;background:repeating-linear-gradient(90deg,${light ? '#17121f22' : '#ffffff1f'} 0 3px,transparent 3px 6px)}
+.fuse i{position:absolute;inset:0 auto 0 0;width:100%;background:var(--tone);animation:burn var(--d) linear forwards}
+.fuse i::after{content:"";position:absolute;right:-3px;top:-3px;width:6px;height:6px;background:#fff6c8;box-shadow:0 0 0 1px #ffb03a;animation:spark .12s steps(2) infinite}
+li:hover .fuse i,li:focus-within .fuse i,li:hover .fuse i::after,li:focus-within .fuse i::after{animation-play-state:paused}
+@keyframes burn{to{width:0}}
+@keyframes spark{50%{transform:translate(1px,-2px) scale(.6);background:#ffb03a}}
+@media (prefers-reduced-motion:reduce){li,li.out{animation:none}.fuse i::after{animation:none}}
+</style><ol part="list" role="region" aria-label="Notifications"></ol>`;
+    this._list = this.shadowRoot.querySelector('ol');
+    keep.forEach(k => this._list.appendChild(k));
+  }
+  /* add one; returns { close } */
+  push(message, o = {}) {
+    const [tone, glyph] = TOAST_TONES[o.tone] || TOAST_TONES.info, dur = o.duration == null ? 4.5 : +o.duration;
+    const li = document.createElement('li');
+    li.style.setProperty('--tone', tone); li.style.setProperty('--d', dur + 's');
+    li.setAttribute('role', o.tone === 'error' ? 'alert' : 'status');
+    const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    li.innerHTML = `<span class="ico" aria-hidden="true"><svg viewBox="0 0 8 8" fill="currentColor">${glyph}</svg></span>
+<div>${o.title ? `<b>${esc(o.title)}</b>` : ''}<div class="msg">${esc(message)}</div>${o.action ? `<button class="act" type="button">${esc(o.action.label)}</button>` : ''}</div>
+<button class="x" type="button" aria-label="Dismiss">X</button>${dur > 0 ? '<span class="fuse" aria-hidden="true"><i></i></span>' : ''}`;
+    let gone = false;
+    const close = () => {
+      if (gone) return; gone = true;
+      if (reduced()) { li.remove(); return; }
+      li.classList.add('out'); setTimeout(() => li.remove(), 320);
+    };
+    li.querySelector('.x').addEventListener('click', close);
+    if (o.action) li.querySelector('.act').addEventListener('click', () => { if (o.action.onClick) o.action.onClick(); close(); });
+    const fuse = li.querySelector('.fuse i');
+    if (fuse) fuse.addEventListener('animationend', e => { if (e.animationName === 'burn') close(); });
+    this._list.appendChild(li);
+    /* never more than five at once */
+    while (this._list.children.length > 5) this._list.firstElementChild.remove();
+    return { close };
+  }
+}
+define('piix-toaster', PiixToasterElement);
+Piixpal.toast = (message, o) => {
+  let t = document.querySelector('piix-toaster');
+  if (!t) { t = document.createElement('piix-toaster'); document.body.appendChild(t); }
+  return t.push(message, o);
+};
+ELEMENTS.toast = 'piix-toaster';
+
+/* ---- gl/tooltip.js ---- */
+/* TOOLTIP: a little pixel speech bubble that types its words out.   @component tooltip
+ *
+ *   <piix-tooltip tip="Copy link"><button>…</button></piix-tooltip>
+ *
+ * Hover or focus what's inside and a bubble pops up next to it, with a stepped pixel tail, and
+ * the text types itself in behind a blinking block cursor. It flips to the other side when
+ * there isn't room, sits above everything (no clipping by overflow), and Escape hides it.
+ * Screen readers get the tip as a description of the thing inside.
+ *
+ *   tip       the words
+ *   side      top | bottom                                 default: top
+ *   theme     dark | light                                 default: dark
+ *   delay     ms before it shows                           default: 150 */
+let TIP_N = 0;
+class PiixTooltipElement extends HTMLElement {
+  static get observedAttributes() { return ['tip', 'theme']; }
+  constructor() { super(); this.attachShadow({ mode: 'open' }); }
+  connectedCallback() {
+    const light = this.getAttribute('theme') === 'light', bg = light ? '#fbf8f2' : '#17121f', fg = light ? '#17121f' : '#f2eef8', ring = light ? '#17121f' : '#3a3049';
+    this.shadowRoot.innerHTML = `<style>
+:host{display:inline-block;position:relative}
+.tip{position:fixed;z-index:2147483001;left:0;top:0;box-sizing:border-box;width:max-content;padding:7px 11px 8px;max-width:260px;background:${bg};color:${fg};font:500 13px/1.35 "Bricolage Grotesque",system-ui,sans-serif;
+  box-shadow:inset 0 0 0 2px ${ring};clip-path:${kitCorners(2)};pointer-events:none;visibility:hidden;white-space:pre-wrap}
+.wrap{position:fixed;z-index:2147483001;left:0;top:0;pointer-events:none;filter:drop-shadow(0 6px 12px rgba(0,0,0,.25))}
+.wrap.on .tip{visibility:visible;animation:tpop .16s steps(2)}
+@keyframes tpop{from{transform:translateY(4px) scale(.94)}}
+.tail{position:fixed;width:12px;height:6px;visibility:hidden;display:block}
+.tail svg{display:block;width:12px;height:6px}
+.wrap.on .tail{visibility:visible}
+.wrap.below .tail{transform:scaleY(-1)}
+.cur{display:inline-block;width:.5em;height:1em;margin-left:1px;vertical-align:-2px;background:currentColor;animation:blink .8s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.wrap.on .tip{animation:none}.cur{display:none}}
+</style><slot></slot><div class="wrap" aria-hidden="true"><div class="tip" part="tip"></div><i class="tail"><svg viewBox="0 0 6 3" shape-rendering="crispEdges"><path fill="${ring}" d="M0 0h6v1H5v1H4v1H2V2H1V1H0z"/><path fill="${bg}" d="M1 0h4v1H4v1H2V1H1z"/></svg></i></div>`;
+    this._wrap = this.shadowRoot.querySelector('.wrap'); this._tip = this.shadowRoot.querySelector('.tip'); this._tail = this.shadowRoot.querySelector('.tail');
+    /* screen readers: describe the thing inside with a hidden copy of the tip */
+    this._desc = document.createElement('span');
+    this._desc.id = 'piix-tip-' + (++TIP_N);
+    this._desc.hidden = true;
+    this.appendChild(this._desc);
+    this._label();
+    const show = () => { clearTimeout(this._t); this._t = setTimeout(() => this.show(), +this.getAttribute('delay') || 150); };
+    const hide = () => { clearTimeout(this._t); this.hide(); };
+    this.addEventListener('pointerenter', show); this.addEventListener('pointerleave', hide);
+    this.addEventListener('focusin', show); this.addEventListener('focusout', hide);
+    this.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+    addEventListener('scroll', this._sh = () => this.hide(), { passive: true, capture: true });
+  }
+  disconnectedCallback() { removeEventListener('scroll', this._sh, { capture: true }); clearInterval(this._ty); }
+  attributeChangedCallback() { if (this._desc) { this._label(); if (this._wrap.classList.contains('on')) this.show(); } }
+  _label() {
+    this._desc.textContent = this.getAttribute('tip') || '';
+    const t = [...this.children].find(c => c !== this._desc);
+    if (t) t.setAttribute('aria-describedby', this._desc.id);
+  }
+  show() {
+    const text = this.getAttribute('tip') || '';
+    if (!text) return;
+    const tip = this._tip, w = this._wrap, r = this.getBoundingClientRect();
+    tip.style.width = ''; tip.textContent = text;
+    w.classList.add('on');
+    /* place it, flipping below if there's no room above */
+    const tr0 = tip.getBoundingClientRect(), tr = { width: tr0.width + 12, height: tr0.height }, gap = 10;
+    let below = this.getAttribute('side') === 'bottom' || r.top - tr.height - gap < 4;
+    if (below && r.bottom + tr.height + gap > innerHeight - 4) below = false;
+    const x = Math.round(Math.min(innerWidth - tr.width - 6, Math.max(6, r.left + r.width / 2 - tr.width / 2)));
+    const y = Math.round(below ? r.bottom + gap : r.top - tr.height - gap);
+    tip.style.width = Math.ceil(tr.width + 12) + 'px'; tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    const tx = Math.round(r.left + r.width / 2 - 6);
+    this._tail.style.left = tx + 'px'; this._tail.style.top = (below ? y - 4 : y + tr.height - 2) + 'px';
+    w.classList.toggle('below', below);
+    /* type it in */
+    clearInterval(this._ty);
+    if (reduced()) return;
+    let i = 0;
+    tip.innerHTML = '<span></span><i class="cur"></i>';
+    const out = tip.firstChild;
+    this._ty = setInterval(() => { out.textContent = text.slice(0, ++i); if (i >= text.length) { clearInterval(this._ty); setTimeout(() => { const c = tip.querySelector('.cur'); if (c) c.remove(); }, 900); } }, 22);
+  }
+  hide() { clearInterval(this._ty); this._wrap.classList.remove('on'); }
+}
+define('piix-tooltip', PiixTooltipElement);
+ELEMENTS.tooltip = 'piix-tooltip';
 
 K.start(document.currentScript);
 })();
