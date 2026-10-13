@@ -92,3 +92,29 @@ const head = (crumbs, h1, p, extra = '') => `<header class="doc-head ui-head">
 </header>`;
 
 /* a live preview with a code tab; a split stage puts the divider's two colours above and below it */
+const stageHtml = (demo, st = {}) => {
+  let inner = demo;
+  if (st.split) {
+    const from = (demo.match(/from="([^"]+)"/) || [, '#17121f'])[1], to = (demo.match(/to="([^"]+)"/) || [, '#f3eee3'])[1];
+    inner = `<div class="split" style="background:${from}"></div>${demo}<div class="split" style="background:${to}"></div>`;
+  }
+  const cls = ['ui-stage', st.light ? 'light' : '', st.block ? 'block' : '', st.split ? 'is-split' : '', st.narrow ? 'narrow' : '', st.top ? 'top' : ''].filter(Boolean).join(' ');
+  const style = [st.h ? `min-height:${st.h}px` : '', st.pad != null ? `padding:${st.pad}px` : ''].filter(Boolean).join(';');
+  return `<div class="${cls}"${style ? ` style="${style}"` : ''}>${st.hint ? `<p class="hint">${esc(st.hint)}</p>` : ''}<div class="stage-in">${inner}</div></div>`;
+};
+const demoBox = ({ demo, code, show, stage = {}, controls, tag, id }) => {
+  const shown = show || demo, text = code || demo;
+  /* what the demo starts with: its own attribute, or the component's default */
+  const cur = (attr, def) => { const m = shown.match(new RegExp('<' + tag + '\b[^>]*\s' + attr + '="([^"]*)"')); return m ? m[1] : def; };
+  const ctl = controls && controls.length ? `<div class="ui-controls" data-target="${tag}">${controls.map(([attr, label, kind, opts, def]) => {
+    if (kind === 'palette') return `<div class="ctl"><span>${label}</span><div class="swatches" data-attr="${attr}" data-def="${opts}">${opts === '' ? `<button type="button" class="own" data-val="" aria-pressed="${!cur(attr, '')}">Scene</button>` : ''}${PALETTES.map(p => `<button type="button" data-val="${p}" title="${p}" aria-label="${p}" aria-pressed="${p === cur(attr, opts)}" style="--sw:linear-gradient(90deg,${PAL[p].join(',')})"></button>`).join('')}</div></div>`;
+    if (kind === 'range') { const [min, max, step, d] = opts, v = cur(attr, d); return `<label class="ctl"><span>${label}</span><input type="range" data-attr="${attr}" data-def="${d}" min="${min}" max="${max}" step="${step}" value="${v}"><output>${v}</output></label>`; }
+    return `<div class="ctl"><span>${label}</span><div class="seg" data-attr="${attr}" data-def="${def}">${opts.map(o => `<button type="button" data-val="${o}" aria-pressed="${o === cur(attr, def)}">${o || 'default'}</button>`).join('')}</div></div>`;
+  }).join('')}</div>` : '';
+  return `<div class="ui-demo"${id ? ` id="${id}"` : ''} data-code="${esc(text)}">
+${tabs([['Preview', stageHtml(shown, stage)], ['Code', codeBox(text)]], ' ui-tabs')}
+${stage.replay ? '<button class="replay" type="button" title="Play it again">↻ Replay</button>' : ''}
+${ctl}
+</div>`;
+};
+
