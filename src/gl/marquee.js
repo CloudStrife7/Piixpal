@@ -65,3 +65,5 @@ class PiixMarqueeElement extends HTMLElement {
     this._track.style.transform = `translateX(${this._x.toFixed(1)}px)`;
   }
 }
+define('piix-marquee', PiixMarqueeElement);
+ELEMENTS.marquee = 'piix-marquee';
