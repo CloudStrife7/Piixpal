@@ -91,3 +91,5 @@ class PiixSliderElement extends GLStage {
     return { u_k: [this._f, this._sp, 0, 0], u_hover: Math.max(this._hov, this._drag ? 1 : 0) };
   }
 }
+define('piix-slider', PiixSliderElement);
+ELEMENTS.slider = 'piix-slider';
