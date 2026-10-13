@@ -57,3 +57,5 @@ class PiixTextElement extends GLStage {
   _shader() { return TX_SHADER; }
   _uniforms() { return { u_k: [TX_FX[this.effect], 0, 0, 0] }; }
 }
+define('piix-text', PiixTextElement);
+ELEMENTS.text = 'piix-text';
