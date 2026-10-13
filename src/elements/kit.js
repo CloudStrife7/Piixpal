@@ -32,3 +32,4 @@ const kitPal = (cv, name, clip, i, s) => {
   const g = cv.getContext('2d'); g.imageSmoothingEnabled = false; g.clearRect(0, 0, cv.width, cv.height); g.drawImage(img, 0, 0, cv.width, cv.height);
   return true;
 };
+const kitClip = (name, want) => { const sp = SPRITES[name], c = sp ? Object.keys(sp.frames) : []; return want.find(w => c.includes(w)) || c[0]; };
