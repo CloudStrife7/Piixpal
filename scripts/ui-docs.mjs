@@ -250,3 +250,20 @@ ${tabs([
 <ul class="ui-list"><li>Every evergreen browser with WebGL. Where WebGL isn't available, GPU components fall back to a still gradient in their palette and stay usable.</li><li>If the GPU context is lost (a laptop switching graphics cards, say), they rebuild it by themselves.</li></ul>
 ${pager('installation')}`;
 
+/* ---------- palettes ---------- */
+const palettesBody = `${head(['Get started'], 'Palettes', 'Every GPU component is dithered into a palette: a short list of colours, dark to light. Pick one of the ten, or pass your own.')}
+<div class="ui-pals">
+${PALETTES.map(p => `  <div class="ui-pal">
+    <piix-shader kind="mesh" palette="${p}" height="140px" pixel="5"></piix-shader>
+    <div class="sw">${PAL[p].map(c => `<i style="background:${c}" title="${c}"></i>`).join('')}</div>
+    <h3>${p}</h3><code>palette="${p}"</code>
+  </div>`).join('\n')}
+</div>
+<h2 class="ui-h" id="custom">Your own colours</h2>
+<p class="ui-note">Pass two to six colours, dark to light, separated by commas. The darkest is the background, the lightest the highlights.</p>
+${demoBox({ demo: '<piix-shader kind="warp" palette="#0b0a10,#3a2a6b,#ff6b4a,#ffe8a8" height="240px"></piix-shader>', stage: { pad: 0 } })}
+<h2 class="ui-h" id="dither">Dither</h2>
+<p class="ui-note">Between two palette colours the pixels are ordered-dithered with an 8×8 Bayer matrix, which is what gives everything its texture. Turn it down with <code>dither</code>, from 1 (full) to 0 (flat bands).</p>
+${demoBox({ demo: '<div class="ex-row">\n  <piix-shader kind="mesh" dither="1" height="160px"></piix-shader>\n  <piix-shader kind="mesh" dither=".5" height="160px"></piix-shader>\n  <piix-shader kind="mesh" dither="0" height="160px"></piix-shader>\n</div>', stage: { pad: 0 } })}
+${pager('palettes')}`;
+
