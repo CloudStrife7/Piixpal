@@ -113,3 +113,7 @@ const LAYOUTS = [
   </div>
 </section>` }
 ];
+const layoutPage = l => ({ ...l, section: 'Layouts', tag: 'piix-scene', file: 'scene', stage: { pad: 0, light: true, h: 380, block: true },
+  a11y: ['Your copy is ordinary HTML: headings, paragraphs, real buttons.', 'The scenes are described for screen readers, or hidden when they are decoration.'] });
+
+export const SCENE_PAGES = [...SCENES.map(scenePage), ...LAYOUTS.map(layoutPage)];
