@@ -45,3 +45,27 @@ const BG = [
   ['fire', 'fire', 'Fire', 'fire', 'Pixel flames licking up from the bottom.',
     'Classic demo-scene fire: turbulent noise rising and cooling as it climbs. Put it at the bottom of a section, or make a whole "hot deals" banner out of it.']
 ];
+const bgPage = ([kind, slug, name, pal, brief, about]) => ({
+  slug, name, section: 'Backgrounds', tag: 'piix-shader', file: 'shader', brief, about,
+  demo: `<piix-shader kind="${kind}" height="420px"></piix-shader>`,
+  stage: { h: 420, pad: 0 },
+  controls: [['palette', 'Palette', 'palette', pal], ['pixel', 'Pixel', 'range', [2, 10, 1, 4]], ['dither', 'Dither', 'range', [0, 1, .1, 1]], ['speed', 'Speed', 'range', [0, 3, .25, 1]]],
+  examples: [
+    { name: 'Behind your content', note: 'With <code>fill</code> it sits behind everything else in the element it\'s in. Give that element <code>position: relative</code> (the shader does this for you if it\'s static).',
+      demo: `<section class="ex-fill">\n  <piix-shader kind="${kind}" fill pixel="5"></piix-shader>\n  <h2>Ship it loud</h2>\n  <p>Your content sits on top.</p>\n</section>`, stage: { h: 300, pad: 0 } },
+    { name: 'Other palettes', note: 'Every palette works with every background.',
+      demo: `<div class="ex-row">\n  <piix-shader kind="${kind}" palette="${pal === 'ocean' ? 'candy' : 'ocean'}" height="180px"></piix-shader>\n  <piix-shader kind="${kind}" palette="${pal === 'gameboy' ? 'sunset' : 'gameboy'}" height="180px"></piix-shader>\n  <piix-shader kind="${kind}" palette="#0b0a10,#3a2a6b,#ff6b4a,#ffe8a8" height="180px"></piix-shader>\n</div>`, stage: { pad: 0 } },
+    { name: 'Smooth bands', note: '<code>dither="0"</code> swaps the dither pattern for flat colour bands, like a poster.',
+      demo: `<piix-shader kind="${kind}" dither="0" pixel="6" height="220px"></piix-shader>`, stage: { pad: 0 } }
+  ],
+  props: [
+    ['kind', `<code>mesh</code> <code>warp</code> <code>aurora</code> <code>crystal</code> <code>liquid</code> <code>horizon</code> <code>nebula</code> <code>topo</code> <code>dots</code> <code>fire</code>`, 'mesh'],
+    PAL_PROP(`${pal}`), PX_PROP(4),
+    ['dither', '0 for flat colour bands, 1 for full dither', '1'],
+    ['speed', '1 is normal, 0 holds still', '1'],
+    ['height', 'when not filling: px or any CSS length', '360px'],
+    ['fill', 'sit behind the content of the parent element', '']
+  ],
+  a11y: ['It is decoration: hidden from screen readers.', 'With reduced motion it renders one still frame.', 'It only draws while it is on screen, and every Pixel UI component shares one GPU context.']
+});
+
