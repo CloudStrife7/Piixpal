@@ -78,3 +78,5 @@ canvas{position:absolute;bottom:${KIT_U + 2}px;left:0;image-rendering:pixelated;
     this._cv.style.transform = (moving ? d < 0 : !this.checked) ? 'scaleX(-1)' : '';
   }
 }
+define('piix-toggle', PiixToggleElement);
+ELEMENTS.toggle = 'piix-toggle';
