@@ -229,6 +229,26 @@ const sidebar = active => {
   </aside>`;
 };
 
+/* the site's top bar; pre is the way back to components/, ui the way to ui/ */
+export const navBar = (key, pre = '', ui = '../ui/') => `<header class="nav" id="nav">
+  <div class="wrap nav-in">
+    <a class="logo" href="../" aria-label="Piixpal home">${LOGO}<span>p<span class="i">ı</span><span class="i">ı</span>xpal</span></a>
+    <nav class="links" aria-label="Site">
+      <a href="${pre}./"${key === 'index' || key === 'sprites' || key === 'pals' || key === 'crowd' || key === 'type' ? ' aria-current="page"' : ''}>Components</a>
+      <a href="${pre}powers.html"${key === 'powers' ? ' aria-current="page"' : ''}>Superpowers</a>
+      <a href="${pre}3d.html"${key === 'studio' ? ' aria-current="page"' : ''}>3D</a>
+      <a href="${ui}"${key.startsWith('ui') ? ' aria-current="page"' : ''}>Pixel UI</a>
+      <a href="${pre}install.html"${key === 'install' ? ' aria-current="page"' : ''}>Install</a>
+      <a href="${pre}builder.html"${key === 'builder' ? ' aria-current="page"' : ''}>Builder</a>
+    </nav>
+    <div class="theme" role="group" aria-label="Theme">
+      <button type="button" data-theme-set="white" title="White" aria-label="White theme"><svg viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><path fill="currentColor" d="M3 0h2v1H3zM3 7h2v1H3zM0 3h1v2H0zM7 3h1v2H7zM2 2h4v4H2z"/></svg></button>
+      <button type="button" data-theme-set="paper" title="Paper" aria-label="Paper theme"><svg viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><path fill="currentColor" d="M1 0h4v1h1v1h1v6H1zM2 3h4v1H2zM2 5h4v1H2z" fill-rule="evenodd"/></svg></button>
+      <button type="button" data-theme-set="dark" title="Dark" aria-label="Dark theme"><svg viewBox="0 0 8 8" shape-rendering="crispEdges" aria-hidden="true"><path fill="currentColor" d="M3 0h3v1H4v1H3v4h1v1h3v1H2V7H1V6H0V2h1V1h2z"/></svg></button>
+    </div>
+    <a class="btn btn-sm btn-ink" href="https://github.com/diiviikk5/Piixpal" target="_blank" rel="noopener">${GH} Star on GitHub</a>
+  </div>
+</header>`;
 const page = ({ key, title: t, desc, body, extra = '', fonts = '' }) => `<!doctype html>
 <html lang="en">
 <head>
