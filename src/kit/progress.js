@@ -60,3 +60,5 @@ canvas{position:absolute;top:0;image-rendering:pixelated;pointer-events:none}
     this._cv.style.transform = back ? 'scaleX(-1)' : '';
   }
 }
+define('piix-progress', PiixProgressElement);
+ELEMENTS.progress = 'piix-progress';
