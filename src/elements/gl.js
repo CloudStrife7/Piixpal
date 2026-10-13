@@ -285,3 +285,22 @@ const GL_LOOKS = {
   v*=mod(cell.y,2.)<1.?1.:.55;
   return vec4(dpal(v*fl,cell),1.);}`]
 };
+const glLook = el => { const l = el.getAttribute('look'); return GL_LOOKS[l] ? l : 'glow'; };
+/* text that sits on each look */
+const GL_LOOK_TEXT = {
+  glow: list => `color:${list[list.length - 1]};text-shadow:0 1px 0 rgba(0,0,0,.5)`,
+  chrome: () => 'color:#0e0c14;text-shadow:0 1px 0 rgba(255,255,255,.85),0 -1px 0 rgba(0,0,0,.25)',
+  glass: () => 'color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.45)',
+  riso: list => `color:${list[2] || '#eadcc4'}`,
+  crt: list => `color:${list[3] || '#46ff7e'};text-shadow:0 0 8px ${list[3] || '#46ff7e'}88;font-family:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace!important;letter-spacing:0`
+};
+/* glass needs the page behind it blurred; everything else is opaque */
+const glLookHost = look => look === 'glass' ? `-webkit-backdrop-filter:blur(14px) saturate(1.5);backdrop-filter:blur(14px) saturate(1.5);background:rgba(255,255,255,.07);clip-path:${kitCorners(3)};` : '';
+
+/* any CSS colour, as 0..1 rgb for a shader */
+const glRGB = c => {
+  const x = document.createElement('canvas').getContext('2d'); x.fillStyle = '#000'; x.fillStyle = c;
+  const s = x.fillStyle;
+  if (s[0] === '#') return hexRGBA(s).slice(0, 3).map(v => v / 255);
+  return (s.match(/[\d.]+/g) || [0, 0, 0]).slice(0, 3).map(v => +v / 255);
+};
