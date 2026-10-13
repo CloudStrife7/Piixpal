@@ -51,3 +51,65 @@ const scenePage = ([kind, slug, name, brief, about]) => ({
   a11y: ["Announced as an image with a description of the scene, unless it fills a parent (then it's decoration).", 'With reduced motion it renders one still frame.', 'Drawn entirely in a shader: no images to download, and it compiles in the background so the page never stalls.']
 });
 
+/* ---------- layouts: scenes mixed into ordinary pages ---------- */
+const LAYOUTS = [
+  { slug: 'horizon-band', name: 'Horizon band', brief: 'A clean page with a landscape rising along the bottom of the hero.',
+    about: 'The hero is your normal page: plain background, your type, your buttons. Only the bottom third is pixel art, and because the sky is cut out, the mountains rise straight out of your own background colour.',
+    demo: `<section class="lay-band">
+  <div class="lay-copy">
+    <p class="lay-kicker">Summit · Trail planner</p>
+    <h2>Plan the climb. Enjoy the view.</h2>
+    <p>Routes, weather and elevation in one calm place.</p>
+    <piix-button tone="ink">Start planning</piix-button>
+  </div>
+  <piix-scene kind="alps" sky="none" height="260px"></piix-scene>
+</section>` },
+  { slug: 'window', name: 'Window', brief: 'A train window onto the countryside, set into a normal page.',
+    about: 'The train window with its wall cut out becomes a window you can drop next to your copy. The rest of the page stays ordinary, so the window is the one thing that moves.',
+    demo: `<section class="lay-split">
+  <div class="lay-copy">
+    <p class="lay-kicker">Slow rail</p>
+    <h2>Six hours, no signal.</h2>
+    <p>The long way through the hills, for people who need it.</p>
+    <piix-button tone="sky">Book a seat</piix-button>
+  </div>
+  <piix-scene kind="train" sky="none" height="340px"></piix-scene>
+</section>` },
+  { slug: 'split-hero', name: 'Split hero', brief: 'Copy on one side, a framed scene on the other.',
+    about: 'Classic SaaS layout, but the product shot is a living scene in a chunky pixel frame. Works with any scene; here, the castle for a game launch.',
+    demo: `<section class="lay-split dark">
+  <div class="lay-copy">
+    <p class="lay-kicker">Out now on every platform</p>
+    <h2>Keep the castle lit.</h2>
+    <p>A cosy night-watch game about lanterns, ghosts and good neighbours.</p>
+    <piix-glow-button palette="sunset">Play free</piix-glow-button>
+  </div>
+  <div class="lay-frame"><piix-scene kind="castle" height="340px"></piix-scene></div>
+</section>` },
+  { slug: 'fade-into-page', name: 'Fade into page', brief: 'A scene that dissolves into the content below it.',
+    about: 'Put the scene at the top and set <code>fade="bottom"</code>: its last third breaks up into dithered pixels, so it melts into whatever comes next. No hard edge, no gradient banding.',
+    demo: `<section class="lay-fade">
+  <piix-scene kind="galaxy" fade="bottom" height="300px"></piix-scene>
+  <div class="lay-copy center">
+    <h2>Orbit</h2>
+    <p>Satellite data for the rest of us.</p>
+  </div>
+</section>` },
+  { slug: 'scene-cards', name: 'Scene cards', brief: 'Cards with a little living scene as their header.',
+    about: "Blog posts, destinations, playlists: each card gets a small scene instead of a stock photo. They only draw while they're on screen, and they all share one GPU context.",
+    demo: `<div class="lay-cards">
+  <article><piix-scene kind="lake" height="140px"></piix-scene><h3>Still water</h3><p>Lo-fi for slow mornings.</p></article>
+  <article><piix-scene kind="sakura" height="140px"></piix-scene><h3>Petal season</h3><p>Soft piano and rain.</p></article>
+  <article><piix-scene kind="poppies" height="140px"></piix-scene><h3>Storm front</h3><p>Big drums, bigger skies.</p></article>
+</div>` },
+  { slug: 'riso-editorial', name: 'Riso editorial', brief: 'A two-ink print look for a magazine or a portfolio.',
+    about: 'Pair the riso scenes with a serif and the same two inks everywhere else, and the whole page feels printed. The scene is the cover image; the rest is plain HTML and CSS.',
+    demo: `<section class="lay-riso">
+  <piix-scene kind="rays" height="300px"></piix-scene>
+  <div class="lay-copy">
+    <p class="lay-kicker">Issue 07 · Night roads</p>
+    <h2>The long way home</h2>
+    <p>Essays on driving after dark, printed in two inks.</p>
+  </div>
+</section>` }
+];
