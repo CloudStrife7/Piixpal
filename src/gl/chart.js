@@ -98,3 +98,5 @@ class PiixChartElement extends GLStage {
     return { u_k: [this._vals.length, g, this._hi, this.kind] };
   }
 }
+define('piix-chart', PiixChartElement);
+ELEMENTS.chart = 'piix-chart';
