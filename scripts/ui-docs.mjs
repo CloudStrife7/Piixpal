@@ -134,3 +134,51 @@ ${rows.map(r => `<tr>${r.map((c, i) => `<td>${i === 0 ? `<code>${esc(c)}</code>`
 
 /* ---------- layout CSS: the rules a layout's markup uses ---------- */
 const LAY_CSS = readFileSync(join(root, 'site/ui-layouts.css'), 'utf8').split('\n').filter(l => l.includes('{'));
+const layCss = html => {
+  const used = new Set([...html.matchAll(/class="([^"]+)"/g)].flatMap(m => m[1].split(/\s+/)));
+  return LAY_CSS.filter(l => {
+    const sel = l.startsWith('@') ? l.slice(l.indexOf('{') + 1, l.indexOf('{', l.indexOf('{') + 1)) : l.slice(0, l.indexOf('{'));
+    const t = [...sel.matchAll(/\.(lay-[\w-]+|dark|center)/g)].map(m => m[1]);
+    return t.length && t.every(c => used.has(c));
+  }).join('\n');
+};
+/* ---------- a component page ---------- */
+const compPage = u0 => {
+  const u = u0.section === 'Layouts' ? { ...u0, code: `${u0.demo}
+
+<style>
+${layCss(u0.demo)}
+</style>` } : u0;
+  const toc = [['preview', 'Preview'], ['installation', 'Installation'], ['usage', 'Usage']];
+  if (u.examples && u.examples.length) toc.push(['examples', 'Examples']);
+  if (u.props) toc.push(['api', 'API reference']);
+  if (u.events) toc.push(['events', 'Events']);
+  if (u.a11y) toc.push(['accessibility', 'Accessibility']);
+  const gpu = !['piix-stat', 'piix-marquee', 'piix-button', 'piix-toggle', 'piix-checkbox', 'piix-progress'].includes(u.tag);
+  const badges = `<div class="ui-badges"><code>&lt;${u.tag}&gt;</code><span class="b">${gpu ? 'WebGL' : 'DOM + canvas'}</span>${u.tag === 'piix-glow-button' || u.tag === 'piix-input' || u.tag === 'piix-button' || u.tag === 'piix-toggle' || u.tag === 'piix-checkbox' ? '<span class="b">Form-ready</span>' : ''}</div>`;
+  const body = `${head([u.section, esc(u.name)], esc(u.name), u.brief, badges)}
+${demoBox({ demo: u.demo, code: u.code, stage: u.stage, controls: u.controls, tag: u.tag, id: 'preview' })}
+<p class="ui-about">${u.about}</p>
+
+<h2 class="ui-h" id="installation">Installation</h2>
+${install(u)}
+
+<h2 class="ui-h" id="usage">Usage</h2>
+${codeBox(u.code || u.demo)}
+${u.examples && u.examples.length ? `
+<h2 class="ui-h" id="examples">Examples</h2>
+${u.examples.map(e => `<h3 class="ui-h3" id="ex-${slug(e.name)}">${esc(e.name)}</h3>${e.note ? `\n<p class="ui-note">${e.note}</p>` : ''}
+${demoBox({ demo: e.demo, code: e.code, show: e.show, stage: { ...e.stage } })}`).join('\n')}` : ''}
+
+${u.props ? `<h2 class="ui-h" id="api">API reference</h2>
+${table(['Attribute', 'What it does', 'Default'], u.props)}` : ''}
+${u.events ? `
+<h2 class="ui-h" id="events">Events</h2>
+${table(['Event', 'When'], u.events)}` : ''}
+${u.a11y ? `
+<h2 class="ui-h" id="accessibility">Accessibility</h2>
+<ul class="ui-list">${u.a11y.map(a => `<li>${a}</li>`).join('')}</ul>` : ''}
+${pager(u.slug)}`;
+  return shell({ key: u.slug, title: u.name, desc: u.brief, body, toc });
+};
+
