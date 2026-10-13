@@ -100,3 +100,36 @@
 .ui-pal h3{margin:12px 14px 4px;font:400 14px/1 var(--f-pix);text-transform:uppercase}
 .ui-pal code{display:block;margin:0 14px 14px;font:500 12.5px/1 var(--f-mono);color:var(--muted)}
 
+/* helpers used inside the demos */
+.ui-stage .logo,.ui-thumb .logo{font:800 26px/1 "Bricolage Grotesque",system-ui;opacity:.85;white-space:nowrap}
+.ui-thumb .logo.s{font-size:18px}
+.ui-stage .shot,.ui-thumb .shot{height:200px;display:grid;place-items:center;border-radius:4px;background:linear-gradient(135deg,#6b4cff,#ff6b4a);font:800 28px/1 "Bricolage Grotesque";color:#fff}
+.ui-thumb .shot.s{height:96px;font-size:20px}
+.ex-h1{margin:0;font:800 clamp(40px,7vw,84px)/1 "Bricolage Grotesque",system-ui;letter-spacing:-.04em}
+.ex-h2{margin:0;font:800 clamp(30px,4.5vw,52px)/1.05 "Bricolage Grotesque",system-ui;letter-spacing:-.04em}
+.ex-h3{margin:0;font:800 34px/1 "Bricolage Grotesque",system-ui;letter-spacing:-.04em}
+.ex-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px}
+.ex-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;width:100%}
+.ex-fill{position:relative;display:grid;place-content:center;gap:8px;min-height:300px;text-align:center;color:#fff}
+.ex-fill h2{margin:0;font:800 44px/1 "Bricolage Grotesque";letter-spacing:-.04em;text-shadow:3px 3px 0 #0b0a10}
+.ex-fill p{margin:0;font-weight:600;text-shadow:2px 2px 0 #0b0a10}
+.ex-form{display:grid;gap:16px;width:min(100%,420px)}
+.ex-form output,.ui-stage form output{font:12px/1.4 var(--f-mono);opacity:.75}
+.ui-stage form{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.ui-stage .eyebrow{margin:0 0 6px;font:400 12px/1 var(--f-pix);text-transform:uppercase;opacity:.7}
+.ui-stage .price{margin:6px 0;font:800 44px/1 "Bricolage Grotesque"}
+.ui-stage .price small{font-size:16px;opacity:.6}
+.ui-stage piix-glow-card h3{margin:0 0 6px;font:800 22px/1.1 "Bricolage Grotesque"}
+.ui-stage piix-glow-card p{margin:0 0 6px;opacity:.8}
+.ui-stage piix-glow-card{width:min(100%,340px)}
+.ui-stage .ex-grid piix-glow-card{width:auto}
+.ui-stage piix-tabs p{margin:0;opacity:.85}
+
+/* scenes and layouts */
+.ui-stage.block{display:block;padding:0}
+.ui-stage.block .stage-in{display:block}
+.ui-thumb > piix-scene{position:absolute;inset:0;width:100%}
+.ui-thumb .scaled{position:absolute;top:0;left:0;width:250%;transform:scale(.4);transform-origin:top left}
+.ctl .swatches .own{width:auto;padding:0 8px;font:600 11.5px/1 var(--f-sans);text-transform:none;background:var(--card);color:var(--ink)}
+.ctl .swatches .own[aria-pressed=true]{background:var(--ink);color:var(--paper)}
+
