@@ -52,3 +52,5 @@ class PiixRevealElement extends GLStage {
     return { u_k: [RV_PAT[this.getAttribute('pattern')] || 0, p, 0, 0], u_j: [this._col[0], this._col[1], this._col[2], 0] };
   }
 }
+define('piix-reveal', PiixRevealElement);
+ELEMENTS.reveal = 'piix-reveal';
