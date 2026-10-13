@@ -70,3 +70,5 @@ button:active .drop,:host([pressed]) .drop{transform:translateY(${KIT_U}px);filt
     this._pal.style.transform = hopT < .4 ? `translateY(${-Math.sin(hopT / .4 * Math.PI) * 14}px)` : '';
   }
 }
+define('piix-button', PiixButtonElement);
+ELEMENTS.button = 'piix-button';
