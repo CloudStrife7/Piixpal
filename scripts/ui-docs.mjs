@@ -267,3 +267,19 @@ ${demoBox({ demo: '<piix-shader kind="warp" palette="#0b0a10,#3a2a6b,#ff6b4a,#ff
 ${demoBox({ demo: '<div class="ex-row">\n  <piix-shader kind="mesh" dither="1" height="160px"></piix-shader>\n  <piix-shader kind="mesh" dither=".5" height="160px"></piix-shader>\n  <piix-shader kind="mesh" dither="0" height="160px"></piix-shader>\n</div>', stage: { pad: 0 } })}
 ${pager('palettes')}`;
 
+/* ---------- looks: one component, five design languages ---------- */
+const LOOK_GUIDE = [
+  ['glow', 'Glow', 'The default. A dark pixel face, a band of light running round the border and a spotlight under the pointer. At home on dark product pages.', 'lime', 'galaxy'],
+  ['chrome', 'Chrome', 'Y2K liquid metal: a bright sky reflected above a dark horizon line that ripples, and a hot spot that follows the pointer. Pairs with bold sans type and big gradients.', '', 'vista'],
+  ['glass', 'Glass', 'Frosted glass: the page behind is blurred through it, with a lit rim and a glare that sweeps across under the pointer. Put it over a scene, a photo or a gradient.', '', 'sakura'],
+  ['riso', 'Riso', 'A two-ink risograph print: a solid ink face, a halftone shadow on two edges and a second ink laid down slightly off-register. It drifts when you hover. Give it any two inks and a paper as its palette.', '', ''],
+  ['crt', 'Terminal', 'Green phosphor on black: scanlines, a double rule, a faint flicker and a burst of static when you click. Try <code>palette="fire"</code> for amber.', '', 'castle']
+];
+const looksBody = `${head(['Get started'], 'Looks', 'The glow button, glow card, input and dialog all take a <code>look</code>. It swaps the whole style, from the shader to the type, so one set of components can live on very different pages.')}
+${LOOK_GUIDE.map(([id, name, about, , scene]) => `<h2 class="ui-h" id="look-${id}">${name}</h2>
+<p class="ui-note">${about}</p>
+${demoBox({ demo: `<piix-glow-button look="${id}">Get started</piix-glow-button>\n<piix-glow-card look="${id}">\n  <h3>Realtime</h3>\n  <p>Live on every device.</p>\n</piix-glow-card>\n<piix-input look="${id}" placeholder="you@site.com">Email</piix-input>`,
+  show: `<div class="ex-scene"${scene ? '' : ' style="background:#eadcc4"'}>${scene ? `<piix-scene kind="${scene}" fill></piix-scene>` : ''}<piix-glow-button look="${id}">Get started</piix-glow-button><piix-glow-card look="${id}"><h3>Realtime</h3><p>Live on every device.</p></piix-glow-card><piix-input look="${id}" placeholder="you@site.com">Email</piix-input></div>`, stage: { pad: 0, block: true } })}`).join('\n')}
+${pager('looks')}`;
+
+/* ---------- showcase: whole pages built with Pixel UI ---------- */
