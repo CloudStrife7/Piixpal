@@ -100,7 +100,7 @@ function board(T, s, a) {
   const u = T - a;
   $$('.row', s).forEach((r, i) => {
     r.setAttribute('stagger', '16');
-    const want = u >= i * B / 2 ? r.dataset.text : '';
+    const want = u >= i * B / 6 ? r.dataset.text : '';
     if (r.getAttribute('text') !== want) r.setAttribute('text', want);
   });
   cam(s, (1.04 - .04 * E.out(u / BR)) * (1 + pulseAt(T)));
