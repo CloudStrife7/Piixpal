@@ -73,3 +73,24 @@ const glInit = () => {
   } catch (_) { return (GL.ok = false); }
 };
 
+const glProgram = body => {
+  const gl = GL.gl;
+  const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
+  const v = sh(gl.VERTEX_SHADER, GL_VERT), f = sh(gl.FRAGMENT_SHADER, GL_PRELUDE + body + GL_MAIN);
+  const p = gl.createProgram(); gl.attachShader(p, v); gl.attachShader(p, f); gl.linkProgram(p);
+  return { prog: p, v, f, pending: true, u: {} };
+};
+/* is it ready? false while it's still compiling in the background, null if it failed */
+const glReady = P => {
+  if (!P.pending) return P;
+  const gl = GL.gl;
+  if (GL.par && !gl.getProgramParameter(P.prog, GL.par.COMPLETION_STATUS_KHR)) return false;
+  P.pending = false;
+  if (!gl.getProgramParameter(P.prog, gl.LINK_STATUS)) {
+    console.warn('[piixpal] shader:', gl.getShaderInfoLog(P.f) || gl.getProgramInfoLog(P.prog));
+    return null;
+  }
+  P.pos = gl.getAttribLocation(P.prog, 'p');
+  return P;
+};
+
