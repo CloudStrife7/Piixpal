@@ -32,3 +32,32 @@
  *   speed     1 is normal, 0 holds still                          default: 1
  *   height    when not filling: px or any CSS length             default: 480px
  *   fill      sit behind the content of the parent element */
+const SC_HEAD = `
+/* noise read from one shared random texture: a single lookup, so even big scenes compile fast */
+float tnoise(vec2 p){return texture2D(u_tex,(p+u_seed*3.7+.5)/256.).r;}
+float tfbm(vec2 p){float v=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int i=0;i<5;i++){v+=a*tnoise(p);p=m*p;a*=.5;}return v;}
+float h2(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+float ridged(vec2 q){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*(1.-abs(noise(q)*2.-1.));q*=2.03;a*=.5;}return v;}
+vec3 rgb(float r,float g,float b){return vec3(r,g,b)/255.;}
+float box(vec2 p,vec2 a,vec2 b){return step(a.x,p.x)*step(p.x,b.x)*step(a.y,p.y)*step(p.y,b.y);}
+float tri(vec2 p,vec2 b,float hw,float h){float k=(p.y-b.y)/h;return step(0.,k)*step(k,1.)*step(abs(p.x-b.x),hw*(1.-k));}
+float rbox(vec2 p,vec2 c,vec2 hs,float r){vec2 d=abs(p-c)-hs+r;return length(max(d,0.))+min(max(d.x,d.y),0.)-r;}
+float crescent(vec2 p,vec2 c,float r){return step(length(p-c),r)*step(r*.92,length(p-c-vec2(r*.45,r*.25)));}
+float W(){return u_res.x/u_res.y;}
+`;
+/* the end of every scene: colour it down to pixel art, then cut the sky / fade an edge */
+const SC_TAIL = `
+vec4 effect(vec2 uv,vec2 cell){
+  vec2 p=vec2((uv.x-.5)*u_res.x/u_res.y,uv.y),m=u_mouse-.5;
+  vec4 s=scene(uv,p,cell,m);
+  vec3 c=clamp(s.rgb,0.,1.);float b=bayer8(cell);
+  if(u_j.x>.5)c=dpal(dot(c,vec3(.299,.587,.114)),cell);
+  else{float L=max(u_j.y-1.,1.);c=floor(c*L+mix(.5,b*.999,u_dither))/L;}
+  float a=1.;
+  if(u_k.x>.5&&s.a>b*.999+.0005)a=0.;
+  float f=1.;
+  if(u_k.y==1.||u_k.y==3.)f=min(f,(1.-uv.y)/u_k.w);
+  if(u_k.y>=2.)f=min(f,uv.y/u_k.w);
+  if(f<b)a=0.;
+  return vec4(c,a);}`;
+
