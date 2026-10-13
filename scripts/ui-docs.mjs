@@ -118,3 +118,19 @@ ${ctl}
 </div>`;
 };
 
+const install = u => {
+  const files = [...(u.needs || []), u.file];
+  return tabs([
+    ['Script tag', codeBox(`<!-- once, anywhere on the page: every component -->\n<script src="${CDN}/piixpal.min.js"></script>`)],
+    ['Single file', codeBox(`<!-- just ${u.name.toLowerCase()} (the shared engine loads itself, once) -->\n${files.map(f => `<script src="${CDN}/dist/c/${f}.min.js"></script>`).join('\n')}`)],
+    ['npm', codeBox(`npm install piixpal\n\n// once, in your entry file\nimport "piixpal";`)],
+    ['React', codeBox(`// npm install piixpal\nimport "piixpal";\n\nexport default function Page() {\n  return (\n    ${(u.code || u.demo).split('\n').join('\n    ').replace(/class="/g, 'className="')}\n  );\n}`)]
+  ]);
+};
+
+const table = (cols, rows) => `<div class="table-wrap"><table><thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>
+${rows.map(r => `<tr>${r.map((c, i) => `<td>${i === 0 ? `<code>${esc(c)}</code>` : c === '' ? '<span class="muted">–</span>' : i === 2 ? `<code>${esc(c)}</code>` : c}</td>`).join('')}</tr>`).join('\n')}
+</tbody></table></div>`;
+
+/* ---------- layout CSS: the rules a layout's markup uses ---------- */
+const LAY_CSS = readFileSync(join(root, 'site/ui-layouts.css'), 'utf8').split('\n').filter(l => l.includes('{'));
