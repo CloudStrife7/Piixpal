@@ -27,3 +27,33 @@ vec4 effect(vec2 uv,vec2 cell){
   if(fx==1.)v=.55+.45*uv.y;
   v+=.25*exp(-length(aspect(uv)-aspect(u_mouse))*4.)*u_hover;
   return vec4(dpal(.5+.5*v,cell),1.);}`;
+class PiixTextElement extends GLStage {
+  constructor() { super(); this._defPx = 2; this._defPal = 'lime'; this._texCv = document.createElement('canvas'); this._texDirty = true; }
+  get effect() { const e = this.getAttribute('effect'); return e in TX_FX ? e : 'shine'; }
+  _hostCss() { return 'display:inline-block;position:relative;color:transparent;white-space:nowrap;padding:0 .04em;-webkit-text-fill-color:transparent'; }
+  _html() { return '<slot></slot><canvas aria-hidden="true"></canvas>'; }
+  _setup() {
+    this._introLen = this.effect === 'reveal' ? 1.4 : 0;
+    if (!this._mo) { this._mo = new MutationObserver(() => { this._texDirty = true; }); this._mo.observe(this, { characterData: true, childList: true, subtree: true }); }
+    if (document.fonts) document.fonts.ready.then(() => { this._texDirty = true; });
+  }
+  _resized() { this._texDirty = true; }
+  /* the words, in white, at full resolution, where the browser laid them out */
+  _texture() {
+    const r = this.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2), w = Math.max(2, Math.round(r.width * dpr)), h = Math.max(2, Math.round(r.height * dpr));
+    if (this._texDirty || this._texCv.width !== w || this._texCv.height !== h) {
+      const c = this._texCv, x = c.getContext('2d'), cs = getComputedStyle(this);
+      c.width = w; c.height = h; x.clearRect(0, 0, w, h);
+      x.font = `${cs.fontStyle} ${cs.fontWeight} ${parseFloat(cs.fontSize) * dpr}px ${cs.fontFamily}`;
+      x.letterSpacing = cs.letterSpacing === 'normal' ? '0px' : (parseFloat(cs.letterSpacing) * dpr) + 'px';
+      x.textBaseline = 'middle'; x.fillStyle = '#fff';
+      x.fillText(this.textContent.trim(), parseFloat(cs.paddingLeft) * dpr, h / 2 + parseFloat(cs.fontSize) * dpr * .04);
+      this._texDirty = 'upload';
+    }
+    const t = { owner: this, src: this._texCv, dirty: this._texDirty === 'upload' };
+    this._texDirty = false;
+    return t;
+  }
+  _shader() { return TX_SHADER; }
+  _uniforms() { return { u_k: [TX_FX[this.effect], 0, 0, 0] }; }
+}
