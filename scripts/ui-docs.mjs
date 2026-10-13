@@ -76,3 +76,19 @@ ${body}
 </html>
 `;
 
+const codeBox = (code, cls = '') => `<pre class="codebox${cls}"><button class="copy" type="button" data-copy="${esc(code)}">Copy</button>${esc(code)}</pre>`;
+const tabs = (list, cls = '') => `<div class="tabs${cls}" data-tabs>
+  <div class="tab-bar" role="tablist">${list.map(([t], i) => `<button type="button" role="tab" aria-selected="${i === 0}">${t}</button>`).join('')}</div>
+  ${list.map(([, html], i) => html.replace(/^<(\w+) class="/, `<$1${i ? ' hidden' : ''} class="tab-pane `)).join('\n  ')}
+</div>`;
+const pager = s => {
+  const i = ORDER.indexOf(s), a = ORDER[i - 1], b = ORDER[i + 1];
+  return `<nav class="ui-pager" aria-label="More components">${a ? `<a class="prev" href="${href(a)}"><small>Previous</small>${esc(nameOf(a))}</a>` : '<span></span>'}${b ? `<a class="next" href="${href(b)}"><small>Next</small>${esc(nameOf(b))}</a>` : ''}</nav>`;
+};
+const head = (crumbs, h1, p, extra = '') => `<header class="doc-head ui-head">
+  <div class="crumbs"><a href="./">Pixel UI</a>${crumbs.map(c => `<span>/</span><span>${c}</span>`).join('')}</div>
+  <h1>${h1}</h1>
+  <p>${p}</p>${extra}
+</header>`;
+
+/* a live preview with a code tab; a split stage puts the divider's two colours above and below it */
