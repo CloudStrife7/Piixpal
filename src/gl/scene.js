@@ -361,3 +361,5 @@ class PiixSceneElement extends GLStage {
     return { u_j: [this.hasAttribute('palette') ? 1 : 0, clamp(+this.getAttribute('levels') || 6, 2, 16), 0, 0], u_k: [this.getAttribute('sky') === 'none' ? 1 : 0, fade, 0, .32] };
   }
 }
+define('piix-scene', PiixSceneElement);
+ELEMENTS.scene = 'piix-scene';
