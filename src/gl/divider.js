@@ -36,3 +36,5 @@ class PiixDividerElement extends GLStage {
   _shader() { return DV_SHADER; }
   _uniforms() { return { u_j: [...this._from, DV_KINDS[this.getAttribute('kind')] || 0], u_k: [...this._to, this.hasAttribute('flip') ? 1 : 0] }; }
 }
+define('piix-divider', PiixDividerElement);
+ELEMENTS.divider = 'piix-divider';
