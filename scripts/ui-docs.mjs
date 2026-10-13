@@ -227,3 +227,26 @@ ${list.map(u => `  <a class="ui-card" href="${u.slug}.html">
   </a>`).join('\n')}
 </div>`).join('\n')}`;
 
+/* ---------- installation ---------- */
+const installBody = `${head(['Get started'], 'Installation', 'One script tag gets you every component. Or load only the ones you use: each single file pulls in the small shared engine by itself, once.')}
+<h2 class="ui-h" id="script">Script tag</h2>
+<p class="ui-note">Paste this once, anywhere on the page. Then use any tag from these pages.</p>
+${codeBox(`<script src="${CDN}/piixpal.min.js"></script>`)}
+<h2 class="ui-h" id="single">Only what you use</h2>
+<p class="ui-note">Each component has its own file. They share one engine and one GPU context, however many you load.</p>
+${codeBox(`<script src="${CDN}/dist/c/glow-button.min.js"></script>\n<script src="${CDN}/dist/c/shader.min.js"></script>`)}
+<h2 class="ui-h" id="npm">npm</h2>
+${codeBox(`npm install piixpal`)}
+${codeBox(`// once, in your entry file (main.js, layout.tsx, +layout.svelte…)\nimport "piixpal";`)}
+<h2 class="ui-h" id="frameworks">React, Vue, Svelte, Astro</h2>
+<p class="ui-note">They are standard web components, so they work in any framework without a wrapper. In React use <code>className</code> as usual; attributes are plain strings.</p>
+${tabs([
+  ['React', codeBox(`import "piixpal";\n\nexport default function Hero() {\n  return (\n    <piix-hero kind="aurora">\n      <h1>Hello</h1>\n      <piix-glow-button>Start</piix-glow-button>\n    </piix-hero>\n  );\n}`)],
+  ['Vue', codeBox(`// vite.config.js: treat piix-* as custom elements\nvue({ template: { compilerOptions: { isCustomElement: t => t.startsWith("piix-") } } })\n\n<piix-glow-button palette="candy">Start</piix-glow-button>`)],
+  ['Svelte', codeBox(`<script>import "piixpal";</script>\n\n<piix-glow-button palette="candy">Start</piix-glow-button>`)],
+  ['Astro', codeBox(`<script>import "piixpal";</script>\n\n<piix-shader kind="nebula" height="400px"></piix-shader>`)]
+])}
+<h2 class="ui-h" id="support">Browser support</h2>
+<ul class="ui-list"><li>Every evergreen browser with WebGL. Where WebGL isn't available, GPU components fall back to a still gradient in their palette and stay usable.</li><li>If the GPU context is lost (a laptop switching graphics cards, say), they rebuild it by themselves.</li></ul>
+${pager('installation')}`;
+
