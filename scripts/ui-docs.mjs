@@ -54,6 +54,7 @@ const shell = ({ key, title, desc, body, toc = [] }) => `<!doctype html>
 <link rel="stylesheet" href="../site/docs.css">
 <link rel="stylesheet" href="../site/ui.css">
 <link rel="stylesheet" href="../site/ui-layouts.css">
+<link rel="stylesheet" href="../site/ui-heroes.css">
 <!-- Vercel Web Analytics: cookieless page views -->
 <script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments)};</script>
 <script defer src="/_vercel/insights/script.js"></script>
