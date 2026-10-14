@@ -116,6 +116,8 @@ export const UI = [
     ],
     props: [
       ['kind', 'which <a href="mesh-gradient.html">background</a>: <code>mesh</code> <code>warp</code> <code>aurora</code> <code>crystal</code> <code>liquid</code> <code>horizon</code> <code>nebula</code> <code>topo</code> <code>dots</code> <code>fire</code>', 'mesh'],
+      ['fx', 'a smooth <a href="fx-blob.html">3D shader</a> instead: <code>blob</code> <code>glass</code> <code>podium</code> <code>ink</code> <code>aura</code> <code>orb</code> and more', ''],
+      ['scene', 'an <a href="sakura.html">illustrated scene</a> instead', ''],
       PAL_PROP("the background's own"), PX_PROP(5),
       ['align', '<code>center</code> or <code>left</code>', 'center'],
       ['height', 'any CSS length', 'min(88vh, 780px)']
@@ -350,3 +352,8 @@ for (const u of UI) if (LOOKED[u.slug]) {
 UI.push(...MORE_PAGES);
 SECTIONS.splice(SECTIONS.indexOf('Navigation') + 1, 0, 'Overlays');
 SECTIONS.splice(SECTIONS.indexOf('Feedback') + 1, 0, 'Data');
+
+/* ---------- the smooth side: realistic shaders and image effects ---------- */
+import { FX_PAGES } from './ui-fx.mjs';
+UI.push(...FX_PAGES);
+SECTIONS.splice(SECTIONS.indexOf('Layouts') + 1, 0, '3D & Shaders', 'Image effects');
