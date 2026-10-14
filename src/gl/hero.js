@@ -46,9 +46,9 @@ class PiixHeroElement extends HTMLElement {
 .cue{position:absolute;z-index:2;left:50%;bottom:22px;width:12px;height:12px;margin-left:-6px;border-right:4px solid #fff;border-bottom:4px solid #fff;transform:rotate(45deg);opacity:.7;animation:cue 1.6s steps(4) infinite}
 @keyframes cue{50%{transform:translateY(6px) rotate(45deg)}}
 @media (prefers-reduced-motion:reduce){.in{transition:none;opacity:1;transform:none}.cue{animation:none}}
-</style><div class="bg">${fx ? `<piix-fx kind="${fx.replace(/"/g, '')}"${pass.replace(/ kind="[^"]*"/, '')} fill></piix-fx>` : sc ? `<piix-scene kind="${sc.replace(/"/g, '')}"${pass.replace(/ kind="[^"]*"/, '')} pixel="${at('pixel') || 4}" fill></piix-scene>` : `<piix-shader${pass} pixel="${at('pixel') || 5}" fill></piix-shader>`}</div><div class="veil"></div><div class="in" part="content"><slot></slot></div><i class="cue" aria-hidden="true"></i>`;
-    const sh = this.shadowRoot.querySelector('piix-shader, piix-scene, piix-fx');
-    if (!fx) sh._introLen = 1.2;
+</style><div class="bg">${img ? `<piix-image-fx effect="alive" src="${img.replace(/"/g, '')}"${this.hasAttribute('palette') ? ` palette="${at('palette')}"` : ''} alt="" height="100%" style="position:absolute;inset:0"></piix-image-fx>` : fx ? `<piix-fx kind="${fx.replace(/"/g, '')}"${pass.replace(/ kind="[^"]*"/, '')} fill></piix-fx>` : sc ? `<piix-scene kind="${sc.replace(/"/g, '')}"${pass.replace(/ kind="[^"]*"/, '')} pixel="${at('pixel') || 4}" fill></piix-scene>` : `<piix-shader${pass} pixel="${at('pixel') || 5}" fill></piix-shader>`}</div><div class="veil"></div><div class="in" part="content"><slot></slot></div><i class="cue" aria-hidden="true"></i>`;
+    const sh = this.shadowRoot.querySelector('piix-shader, piix-scene, piix-fx, piix-image-fx');
+    if (sh && !fx && !img) sh._introLen = 1.2;
   }
 }
 define('piix-hero', PiixHeroElement);
