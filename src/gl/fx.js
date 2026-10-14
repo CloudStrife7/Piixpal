@@ -10,7 +10,7 @@
  * They all answer the pointer, and with bg="none" the objects float on your own page.
  *
  *   kind      blob | glass | orb | silk | terrain | tunnel | waves | clouds | caustics | morph | gradient | swarm
- *             | ink | podium | reeded | aura
+ *             | ink | podium | reeded | aura | beam | disc | flame
  *   palette   tint it: any palette name or your own colours, dark to light   default: the kind's own
  *   bg        "none": no background, just the object (blob, glass, orb, morph, swarm)
  *   quality   1 is full resolution, lower is faster                         default: .75
