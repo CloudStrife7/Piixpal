@@ -33,11 +33,11 @@ class PiixHeroElement extends HTMLElement {
   attributeChangedCallback(n, a, b) { if (a !== b && this.shadowRoot.firstChild) this._build(); }
   _build() {
     const at = n => this.getAttribute(n), left = at('align') === 'left';
-    const sc = this.getAttribute('scene'), fx = this.getAttribute('fx'), pass = ['kind', 'palette', 'dither', 'speed'].filter(n => this.hasAttribute(n)).map(n => ` ${n}="${String(at(n)).replace(/"/g, '&quot;')}"`).join('');
+    const sc = this.getAttribute('scene'), fx = this.getAttribute('fx'), img = this.getAttribute('image'), pass = ['kind', 'palette', 'dither', 'speed'].filter(n => this.hasAttribute(n)).map(n => ` ${n}="${String(at(n)).replace(/"/g, '&quot;')}"`).join('');
     this.shadowRoot.innerHTML = `<style>
 :host{display:block;position:relative;isolation:isolate;overflow:hidden;min-height:${at('height') || 'min(88vh,780px)'};color:#fff;font-family:"Bricolage Grotesque",system-ui,sans-serif}
 .bg{position:absolute;inset:0;z-index:0}
-.veil{position:absolute;inset:0;z-index:1;opacity:${fx ? 0 : sc ? .55 : 1};pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 35%,rgba(5,3,10,.55) 100%),repeating-linear-gradient(0deg,rgba(0,0,0,.12) 0 2px,transparent 2px 4px)}
+.veil{position:absolute;inset:0;z-index:1;opacity:${fx || img ? 0 : sc ? .55 : 1};pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 35%,rgba(5,3,10,.55) 100%),repeating-linear-gradient(0deg,rgba(0,0,0,.12) 0 2px,transparent 2px 4px)}
 .in{position:relative;z-index:2;min-height:inherit;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:${left ? 'flex-start' : 'center'};text-align:${left ? 'left' : 'center'};padding:clamp(48px,8vw,120px) clamp(20px,6vw,96px);gap:4px;opacity:0;transform:translateY(18px);transition:opacity .7s .9s,transform .7s .9s cubic-bezier(.2,.8,.2,1)}
 :host([data-in]) .in{opacity:1;transform:none}
 ::slotted(h1){margin:0 0 .25em!important;font-weight:800!important;font-size:clamp(40px,7vw,104px)!important;line-height:.95!important;letter-spacing:-.04em!important;text-shadow:0 4px 0 rgba(0,0,0,.35),0 0 40px rgba(0,0,0,.35)}
