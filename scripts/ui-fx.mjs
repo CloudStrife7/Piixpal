@@ -81,11 +81,11 @@ const imgPage = ([effect, name, brief, about]) => ({
   demo: effect === 'morph' ? `<piix-image-fx src="../site/pixelui-30-poster.jpg" src2="../site/pixelui-launch-poster.jpg" effect="morph" alt="A lake at sunset becoming a launch poster" height="440px"></piix-image-fx>`
     : `<piix-image-fx src="../site/pixelui-30-poster.jpg" effect="${effect}" alt="A lake at sunset" height="440px"></piix-image-fx>`,
   stage: { h: 440, pad: 0 },
-  controls: [['effect', 'Effect', 'seg', ['liquid', 'rgb', 'morph', 'ripple', 'streak', 'zoom'], 'liquid'], ['palette', 'Glow', 'palette', 'sunset']],
+  controls: [['effect', 'Effect', 'seg', ['alive', 'liquid', 'rgb', 'morph', 'ripple', 'streak', 'zoom', 'frosted', 'code'], 'liquid'], ['palette', 'Glow', 'palette', 'sunset']],
   examples: effect === 'morph' ? [{ name: 'On its own', note: '<code>auto</code> morphs back and forth without a pointer.', demo: `<piix-image-fx src="day.jpg" src2="night.jpg" effect="morph" auto alt="…"></piix-image-fx>`, show: `<piix-image-fx src="../site/pixelui-30-poster.jpg" src2="../site/launch-poster.jpg" effect="morph" auto alt="" height="300px"></piix-image-fx>`, stage: { pad: 0 } }] : [],
   props: [
     ['src', 'the image (on your site, or served with CORS)', ''], ['src2', 'the second image, for morph', ''], ['alt', 'what it shows', ''],
-    ['effect', '<code>liquid</code> <code>rgb</code> <code>morph</code> <code>ripple</code> <code>streak</code> <code>zoom</code>', 'liquid'],
+    ['effect', '<code>alive</code> <code>liquid</code> <code>rgb</code> <code>morph</code> <code>ripple</code> <code>streak</code> <code>zoom</code> <code>frosted</code> <code>code</code>', 'liquid'],
     ['auto', 'morph on its own instead of on hover', ''], ['palette', 'the glow colours', 'sunset'], ['height', 'any CSS length', "the image's own shape"]
   ],
   a11y: ['Announced as an image with your <code>alt</code> text.', 'With reduced motion the image holds still.']
