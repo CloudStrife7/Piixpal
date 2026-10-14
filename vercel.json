@@ -58,10 +58,5 @@
       "destination": "https://piixpal.dvkk.dev/:path*",
       "permanent": true
     }
-  ],
-  "git": {
-    "deploymentEnabled": {
-      "main": false
-    }
-  }
+  ]
 }
