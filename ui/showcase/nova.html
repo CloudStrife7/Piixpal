@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nova · a Pixel UI showcase</title>
+<link rel="icon" href="../../site/favicon.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=JetBrains+Mono:wght@400;500&family=Silkscreen&display=swap" rel="stylesheet">
+<style>
+  /* Nova: an AI that lives in an orb. Deep indigo, light that breathes. */
+  * { box-sizing: border-box }
+  body { margin: 0; background: #04030a; color: #eef0ff; font: 400 17px/1.55 "Bricolage Grotesque", system-ui, sans-serif }
+  .wrap { width: min(1160px, 100% - 48px); margin: 0 auto }
+  nav { position: absolute; z-index: 5; inset: 0 0 auto; display: flex; justify-content: space-between; align-items: center; padding: 22px 40px }
+  nav b { font-size: 22px; font-weight: 700; letter-spacing: -.03em }
+  nav span { display: flex; gap: 28px; font-size: 15px; color: #a8abd6 }
+  .hero { position: relative; height: 100vh; min-height: 720px; display: grid; place-items: center; overflow: hidden }
+  .hero .in { position: relative; display: grid; justify-items: center; gap: 20px; text-align: center; margin-top: 56vh }
+  .pill { font: 500 12px/1 "JetBrains Mono", monospace; letter-spacing: .1em; text-transform: uppercase; padding: 8px 12px; border: 1px solid #ffffff2a; border-radius: 999px; color: #c4c8ff; background: #ffffff08 }
+  h1 { margin: 0; font-size: clamp(54px, 8vw, 120px); font-weight: 600; letter-spacing: -.055em; line-height: .9; background: linear-gradient(180deg, #fff, #b9bcff); -webkit-background-clip: text; background-clip: text; color: transparent }
+  .ask { width: min(560px, 90vw) }
+  section { padding: 120px 0 }
+  .waves { position: relative; height: 560px; overflow: hidden }
+  .waves .stats { position: absolute; inset: auto 0 60px; display: flex; justify-content: center; gap: 90px }
+  .waves piix-stat { font-size: 18px }
+  h2 { margin: 0 0 16px; font-size: clamp(40px, 5vw, 72px); font-weight: 600; letter-spacing: -.05em; line-height: .95 }
+  .lead { margin: 0 0 40px; color: #a8abd6; max-width: 52ch }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr } .waves .stats { flex-direction: column; gap: 20px; align-items: center } }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; align-items: center }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr } }
+  footer { padding: 30px 40px 44px; display: flex; justify-content: space-between; color: #6d70a0; font-size: 14px }
+</style>
+</head>
+<body>
+<nav><b>nova</b><span><b style="font-size:15px;font-weight:500">Product</b><b style="font-size:15px;font-weight:500">Research</b><b style="font-size:15px;font-weight:500">Pricing</b></span><piix-glow-button size="sm" palette="violet">Sign in</piix-glow-button></nav>
+
+<header class="hero" style="background:radial-gradient(ellipse at 50% 30%,#1d1452 0%,#04030a 65%)">
+  <div style="position:absolute;inset:0 0 34% 0"><piix-fx kind="orb" fill quality=".85" aria-label="A glowing orb of moving light"></piix-fx></div>
+  <div class="in">
+    <span class="pill">Nova 2 · now thinking out loud</span>
+    <h1>Meet Nova.</h1>
+    <div class="ask"><piix-input look="glass" placeholder="Ask anything…">Ask Nova</piix-input></div>
+  </div>
+</header>
+
+<section class="waves">
+  <piix-fx kind="waves" fill palette="#04030a,#1e1b4b,#4f46e5,#22d3ee,#f0abfc"></piix-fx>
+  <div class="stats"><piix-stat value="1.2" decimals="1" suffix="B" tone="sky">questions answered</piix-stat><piix-stat value="180" suffix="ms" tone="violet">to first word</piix-stat><piix-stat value="94" suffix="%" tone="mint">say it gets them</piix-stat></div>
+</section>
+
+<section class="wrap">
+  <h2>It listens like a friend.</h2>
+  <p class="lead">Nova keeps track of what you're working on, remembers how you like things, and says so when it isn't sure.</p>
+  <div class="grid">
+    <piix-glow-card palette="violet"><h3>Memory you control</h3><p>See everything Nova remembers. Delete any of it.</p></piix-glow-card>
+    <piix-glow-card palette="ocean"><h3>Voice, live</h3><p>Talk over it. It stops, listens, and picks up the thread.</p></piix-glow-card>
+    <piix-glow-card palette="candy"><h3>Honest by default</h3><p>When it doesn't know, it says so, and shows its sources.</p></piix-glow-card>
+  </div>
+</section>
+
+<section class="wrap split">
+  <piix-fx kind="swarm" height="480px" aria-label="Thousands of points of light orbiting"></piix-fx>
+  <div><h2>Trained on curiosity.</h2><p class="lead">Every conversation makes the next one better, for you and only you.</p><piix-chart kind="line" values="12,18,21,30,34,45,52,61,70,84,96" palette="#04030a,#4f46e5,#22d3ee,#f0abfc" height="160px"></piix-chart></div>
+</section>
+
+<section class="wrap" style="text-align:center"><h2>Say hello.</h2><p class="lead" style="margin:0 auto 30px">Free for your first thousand questions.</p><piix-glow-button palette="violet" size="lg">Start talking</piix-glow-button></section>
+<footer><span>nova is a made-up product for a Pixel UI showcase</span><span>piixpal.dvkk.dev/ui</span></footer>
+<script src="../../piixpal.js"></script>
+</body>
+</html>
