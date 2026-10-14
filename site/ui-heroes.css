@@ -21,4 +21,14 @@
 .hx-por{background:#e4e2df;color:#111;grid-template-columns:1fr 1fr;align-items:center;align-content:center;padding:0}
 .hx-por piix-image-fx{height:520px}
 .hx-por .hx-copy{padding:40px}
+.hx-visor{background:#d4d4d8;color:#fff}
+.hx-visor h1,.hx-visor p{mix-blend-mode:difference}
+.hx-hood{background:#ff5a12;align-content:start;padding-top:60px}
+.hx-bust{background:#2a323c;align-content:center}
+.hx-bust h1{font:400 clamp(52px,8vw,110px)/.88 "Instrument Serif",serif}
+.hx-bust i{color:#ffb35a}
+.hx-ghost{background:#4a2a96;justify-items:end;text-align:right}
+.hx-ghost h1{font-weight:300;letter-spacing:-.04em}
+.hx-code{background:#000;justify-items:end;text-align:right}
+.hx-code h1{color:#5a5a62;font-weight:800;letter-spacing:-.04em}
 @media (max-width:760px){.hx-disc,.hx-por{grid-template-columns:1fr}}
