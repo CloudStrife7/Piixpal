@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ember Studio · a Pixel UI showcase</title>
+<link rel="icon" href="../../site/favicon.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  /* Ember: a creative studio. Black, red, cream, and ink that never sits still. */
+  * { box-sizing: border-box }
+  body { margin: 0; background: #070506; color: #f4e7dc; font: 400 17px/1.55 "Bricolage Grotesque", system-ui, sans-serif }
+  .mono { font: 400 12px/1.4 "JetBrains Mono", monospace; letter-spacing: .12em; text-transform: uppercase; color: #b9a99c }
+  nav { position: absolute; z-index: 5; inset: 0 0 auto; display: flex; justify-content: space-between; padding: 26px 44px }
+  .hero { position: relative; height: 100vh; min-height: 680px; overflow: hidden }
+  .hero h1 { position: absolute; left: 44px; bottom: 54px; margin: 0; font: 400 clamp(64px, 10.5vw, 188px)/.84 "Instrument Serif", serif; letter-spacing: -.035em; color: #fff3e6; text-shadow: 0 6px 40px rgba(0,0,0,.5) }
+  .hero h1 i { color: #ff4436 }
+  .hero .meta { position: absolute; right: 44px; bottom: 60px; text-align: right; display: grid; gap: 6px }
+  section { padding: 110px 44px }
+  .intro { font: 400 clamp(30px, 3.6vw, 52px)/1.12 "Instrument Serif", serif; max-width: 26ch; margin: 0 }
+  .intro i { color: #ff4436 }
+  .work { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px }
+  @media (max-width: 900px) { .work { grid-template-columns: 1fr } }
+  .work article { display: grid; gap: 14px }
+  .work .cap { display: flex; justify-content: space-between; align-items: baseline }
+  .work h3 { margin: 0; font: 400 34px/1 "Instrument Serif", serif }
+  .contact { position: relative; height: 72vh; display: grid; place-content: center; text-align: center; overflow: hidden }
+  .contact h2 { position: relative; margin: 0 0 26px; font: italic 400 clamp(56px, 9vw, 150px)/.9 "Instrument Serif", serif; color: #fff }
+  .contact .mono { position: relative; color: #fff2dc }
+  footer { padding: 26px 44px 40px; display: flex; justify-content: space-between }
+</style>
+</head>
+<body>
+<nav><span class="mono">Ember Studio</span><span class="mono">Work · About · Contact</span></nav>
+
+<header class="hero">
+  <piix-fx kind="ink" fill quality=".8" aria-label="Red ink flowing over black"></piix-fx>
+  <h1>We make things<br>that <i>burn</i> bright.</h1>
+  <div class="meta"><span class="mono">Brand · Motion · Web</span><span class="mono">Lisbon / Remote</span></div>
+</header>
+
+<section><p class="intro">An independent studio for brands that would rather be <i>remembered</i> than liked. Twelve people, one kiln, no templates.</p></section>
+
+<section style="padding-top:0">
+  <div class="work">
+    <article><piix-image-fx src="../../site/pixelui-30-poster.jpg" src2="../../site/launch-poster.jpg" effect="morph" height="440px" alt="Lake at dusk, becoming a poster"></piix-image-fx><div class="cap"><h3>Still Water</h3><span class="mono">Identity · 2026</span></div></article>
+    <article><piix-image-fx src="../../site/pixelui-launch-poster.jpg" effect="rgb" height="440px" alt="A neon sign split into colour"></piix-image-fx><div class="cap"><h3>Static FM</h3><span class="mono">Motion · 2026</span></div></article>
+    <article><piix-image-fx src="../../site/launch-poster.jpg" effect="liquid" height="440px" alt="A poster rippling like water"></piix-image-fx><div class="cap"><h3>Soft Drop</h3><span class="mono">Campaign · 2025</span></div></article>
+    <article><piix-image-fx src="../../site/pixelui-30-poster.jpg" effect="streak" height="440px" alt="Light streaking across a lake"></piix-image-fx><div class="cap"><h3>Long Exposure</h3><span class="mono">Film · 2025</span></div></article>
+  </div>
+</section>
+
+<section class="contact">
+  <piix-fx kind="reeded" fill palette="#070506,#2a0909,#c4121d,#ff4436,#ffb08a,#fff2dc"></piix-fx>
+  <h2>Start a fire.</h2>
+  <span class="mono">hello@ember.studio</span>
+</section>
+
+<footer><span class="mono">Ember is a made-up studio for a Pixel UI showcase</span><span class="mono">piixpal.dvkk.dev/ui</span></footer>
+<script src="../../piixpal.js"></script>
+</body>
+</html>
