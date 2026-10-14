@@ -20,8 +20,9 @@
  *   fill      sit behind the content of the parent element */
 const FX_HEAD = `
 float AR(){return u_res.x/u_res.y;}
-vec2 P(vec2 uv){return (uv-.5)*vec2(AR(),1.);}
-vec2 MS(){return (u_mouse-.5)*vec2(AR(),1.);}
+/* centred, with the shorter side spanning one unit, so objects fit tall screens too */
+vec2 P(vec2 uv){return (uv-.5)*vec2(AR(),1.)/min(AR(),1.);}
+vec2 MS(){return (u_mouse-.5)*vec2(AR(),1.)/min(AR(),1.);}
 mat2 rot(float a){float c=cos(a),s=sin(a);return mat2(c,s,-s,c);}
 float smin(float a,float b,float k){float h=clamp(.5+.5*(b-a)/k,0.,1.);return mix(b,a,h)-k*h*(1.-h);}
 float sn(vec3 p){return sin(p.x*1.3+sin(p.y*1.7))*sin(p.y*1.1+sin(p.z*1.9))*sin(p.z*1.5+sin(p.x*1.2));}
