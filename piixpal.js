@@ -12024,7 +12024,7 @@ ELEMENTS.flap = 'piix-flap';
  * They all answer the pointer, and with bg="none" the objects float on your own page.
  *
  *   kind      blob | glass | orb | silk | terrain | tunnel | waves | clouds | caustics | morph | gradient | swarm
- *             | ink | podium | reeded | aura
+ *             | ink | podium | reeded | aura | beam | disc | flame
  *   palette   tint it: any palette name or your own colours, dark to light   default: the kind's own
  *   bg        "none": no background, just the object (blob, glass, orb, morph, swarm)
  *   quality   1 is full resolution, lower is faster                         default: .75
@@ -12180,6 +12180,73 @@ vec4 fx(vec2 uv){
   col=mix(col,pal(1.),smoothstep(.22,.0,abs(y+.3+.08*sin(p.x*1.6-t*2.)))*.8);
   col=mix(col,pal(.2),smoothstep(.25,.0,abs(y-.55))*.6);
   col*=1.-.35*smoothstep(.4,1.,length(p*vec2(.7,1.)));
+  return vec4(col,1.);}`],
+  beam: ['#050100,#2a0700,#8a1d00,#ff4d00,#ff9a3c,#fff0c8', false, `
+float map(vec3 p){
+  vec3 q=p-vec3(0.,-1.75,0.);q.xz*=rot(.4+MS().x*.2);
+  float d=length(q*vec3(.62,1.05,.75))-1.35;
+  d+=.2*fb3(q*2.3)+.06*fb3(q*6.5);
+  return min(d*.65,p.y+1.9);}` + FX_MARCH + `
+float laser(vec2 p){
+  float s=0.;
+  for(int i=0;i<16;i++){float fi=float(i),h=fract(sin(fi*12.9898)*43758.5);
+    float x=(h-.5)*.36+.012*sin(u_time*(1.+h)+fi)+MS().x*.06;
+    float fl=.55+.45*sin(u_time*(6.+h*9.)+fi*3.1);
+    float w=abs(p.x-x);s+=(exp(-w*1300.)*1.8+exp(-w*90.)*.3+exp(-w*14.)*.05)*fl;}
+  return s;}
+vec4 fx(vec2 uv){
+  vec2 p=P(uv);vec3 ro=vec3(0.,.35,6.),rd=normalize(vec3(p.x,p.y-.05,-2.));
+  vec3 bg=mix(pal(.04),pal(.3),smoothstep(-.6,.8,p.y))+pal(.55)*exp(-abs(p.x)*2.4)*smoothstep(-.3,.6,p.y)*.55;
+  float t=march(ro,rd);
+  vec3 col=bg;
+  if(t<12.){vec3 pp=ro+rd*t,n=nrm(pp);
+    float lit=exp(-length(pp.xz-vec2(MS().x*.4,0.))*1.3)*(max(n.y,0.)+.25);
+    col=mix(pal(.02),pal(.18),max(n.y,0.)*.5)+pal(.7)*lit*1.4+pal(.45)*pow(1.-max(dot(n,-rd),0.),3.)*.35;
+    col=mix(col,bg,1.-exp(-max(t-5.,0.)*.12));
+  }
+  if(t>=12.){float L=laser(p);col+=mix(pal(.75),pal(1.),clamp(L*.4,0.,1.))*L;}
+  return vec4(col,1.);}`],
+
+  disc: ['#000000,#0b0b10,#3a3d48,#c9ccd6,#ffffff', true, `
+vec3 spec(float x){return clamp(abs(fract(x+vec3(0.,.67,.33))*6.-3.)-1.,0.,1.);}
+vec4 fx(vec2 uv){
+  vec2 p=P(uv),m=MS();
+  float ax=-.75+m.y*.5+.06*sin(u_time*.5),ay=.55+m.x*.6+.08*cos(u_time*.4);
+  vec3 n=vec3(0.,0.,1.);n.yz*=rot(ax);n.xz*=rot(ay);
+  vec3 u=normalize(cross(n,vec3(0.,1.,0.)+vec3(.0001))),v=cross(n,u);
+  vec3 ro=vec3(0.,0.,4.2),rd=normalize(vec3(p,-2.));
+  float dn=dot(rd,n);vec3 bg=pal(0.);
+  if(abs(dn)<.001)return vec4(bg,u_k.x>.5?0.:1.);
+  float t=-dot(ro,n)/dn;vec3 q=ro+rd*t;vec2 l=vec2(dot(q,u),dot(q,v));
+  float r=length(l),a=atan(l.y,l.x)+u_time*.6;
+  if(r>1.25||r<.17||t<0.)return vec4(bg,u_k.x>.5?0.:1.);
+  vec3 refl=reflect(rd,n);
+  float la=atan(refl.y,refl.x),sweep=pow(abs(cos(atan(l.y,l.x)-la*1.3-1.)),26.);
+  vec3 col=vec3(.03)+pal(.3)*.12*(.5+.5*sin(r*900.));
+  col+=spec(r*1.6-.25+dot(refl,vec3(.3,.5,.2)))*sweep*1.25;
+  col+=spec(r*2.3+.4)*.06*(.5+.5*sin(r*640.+a*2.));
+  col+=vec3(.6)*pow(max(dot(refl,normalize(vec3(.3,.7,.6))),0.),30.)*.6;
+  if(r<.34){col=vec3(.02)+vec3(.8)*(smoothstep(.006,0.,abs(r-.2))+smoothstep(.004,0.,abs(r-.27))*.6+smoothstep(.003,0.,abs(r-.33))*.4);}
+  col+=vec3(.9)*smoothstep(.012,0.,abs(r-1.24))*.8+spec(a*.3)*smoothstep(.01,0.,abs(r-1.235))*.4;
+  return vec4(col,1.);}`],
+
+  flame: ['#03040a,#0c1530,#ff2e9a,#ff8a1f,#ffe08a,#ffffff', false, `
+vec3 spec(float x){return clamp(abs(fract(x+vec3(0.,.67,.33))*6.-3.)-1.,0.,1.);}
+vec4 fx(vec2 uv){
+  vec2 p=P(uv),m=MS();float t=u_time;
+  vec3 col=mix(pal(0.),pal(.12),uv.y*.6)+pal(.2)*.15*exp(-abs(p.x-m.x*.3)*2.);
+  vec2 q=vec2((p.x-m.x*.35)*1.5,p.y);
+  float f=tf(vec2(q.x*2.,q.y*.9-t*1.5)*2.2)*.65+tf(vec2(q.x*4.6+3.,q.y*2.2-t*2.4)*2.2)*.35;
+  float wisp=tf(vec2(q.x*7.+1.,q.y*3.5-t*3.2)*2.);
+  float body=f*1.5+wisp*.25-(p.y+.62)*1.05-abs(q.x)*1.05;
+  float a=smoothstep(-.08,.45,body),hot=smoothstep(.35,.9,body);
+  float ht=clamp((p.y+.5)*1.05-hot*.25,0.,1.);
+  vec3 c=ht<.3?mix(pal(.95),pal(.8),ht/.3):ht<.6?mix(pal(.8),pal(.62),(ht-.3)/.3):mix(pal(.62),pal(.43),(ht-.6)/.4);
+  c=mix(c,spec(fract(f*1.6+p.y*.5-t*.08)),.1*(1.-hot))*1.15;
+  col=col*(1.-a*.85)+c*a*(.7+hot*.35);
+  col+=pal(.6)*.18*exp(-max(-body,0.)*6.)*smoothstep(-.7,.1,p.y);
+  for(int i=0;i<24;i++){float fi=float(i),h=fract(sin(fi*91.3)*4375.5),y=fract(h*7.+t*(.15+h*.2))*1.6-.6;
+    vec2 sp=vec2((h-.5)*.9+sin(t+fi)*.05+m.x*.3,y);col+=spec(h+t*.1)*exp(-length(p-sp)*260.)*(1.-y*.5);}
   return vec4(col,1.);}`],
   orb: ['#04030a,#1d1452,#4f46e5,#22d3ee,#f0abfc,#ffffff', true, `
 vec4 fx(vec2 uv){
@@ -12438,7 +12505,7 @@ define('piix-glow-card', PiixGlowCardElement);
 ELEMENTS['glow-card'] = 'piix-glow-card';
 
 /* ---- gl/hero.js ---- */
-/* HERO: a whole hero section on a GPU pixel background.   @component hero  @needs shader  @needs scene  @needs fx
+/* HERO: a whole hero section on a GPU pixel background.   @component hero  @needs shader  @needs scene  @needs fx  @needs image-fx
  *
  *   <piix-hero kind="horizon">
  *     <p class="eyebrow">New · v1.0</p>
@@ -12455,13 +12522,14 @@ ELEMENTS['glow-card'] = 'piix-glow-card';
  *   kind      mesh | warp | aurora | crystal | liquid | horizon | nebula | topo | dots | fire   default: mesh
  *   fx        a smooth realistic shader instead: blob | glass | orb | silk | terrain | tunnel | waves | clouds |
  *             caustics | morph | gradient | swarm | ink | podium | reeded | aura
+ *   image     your own picture, brought to life (depth, glow, haze): any image URL
  *   scene     use an illustrated scene instead: sakura | alps | lake | galaxy | rays | vortex | train | poppies | castle | vista
  *   palette   any palette name or your own colours        default: the kind's own
  *   pixel     size of one background pixel, px             default: 5
  *   align     center | left                                default: center
  *   height    any CSS length                               default: min(88vh, 780px) */
 class PiixHeroElement extends HTMLElement {
-  static get observedAttributes() { return ['kind', 'scene', 'fx', 'palette', 'pixel', 'align', 'height', 'dither', 'speed']; }
+  static get observedAttributes() { return ['kind', 'scene', 'fx', 'image', 'palette', 'pixel', 'align', 'height', 'dither', 'speed']; }
   constructor() { super(); this.attachShadow({ mode: 'open' }); }
   connectedCallback() {
     this._build();
@@ -12472,11 +12540,11 @@ class PiixHeroElement extends HTMLElement {
   attributeChangedCallback(n, a, b) { if (a !== b && this.shadowRoot.firstChild) this._build(); }
   _build() {
     const at = n => this.getAttribute(n), left = at('align') === 'left';
-    const sc = this.getAttribute('scene'), fx = this.getAttribute('fx'), pass = ['kind', 'palette', 'dither', 'speed'].filter(n => this.hasAttribute(n)).map(n => ` ${n}="${String(at(n)).replace(/"/g, '&quot;')}"`).join('');
+    const sc = this.getAttribute('scene'), fx = this.getAttribute('fx'), img = this.getAttribute('image'), pass = ['kind', 'palette', 'dither', 'speed'].filter(n => this.hasAttribute(n)).map(n => ` ${n}="${String(at(n)).replace(/"/g, '&quot;')}"`).join('');
     this.shadowRoot.innerHTML = `<style>
 :host{display:block;position:relative;isolation:isolate;overflow:hidden;min-height:${at('height') || 'min(88vh,780px)'};color:#fff;font-family:"Bricolage Grotesque",system-ui,sans-serif}
 .bg{position:absolute;inset:0;z-index:0}
-.veil{position:absolute;inset:0;z-index:1;opacity:${fx ? 0 : sc ? .55 : 1};pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 35%,rgba(5,3,10,.55) 100%),repeating-linear-gradient(0deg,rgba(0,0,0,.12) 0 2px,transparent 2px 4px)}
+.veil{position:absolute;inset:0;z-index:1;opacity:${fx || img ? 0 : sc ? .55 : 1};pointer-events:none;background:radial-gradient(ellipse at 50% 45%,transparent 35%,rgba(5,3,10,.55) 100%),repeating-linear-gradient(0deg,rgba(0,0,0,.12) 0 2px,transparent 2px 4px)}
 .in{position:relative;z-index:2;min-height:inherit;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;align-items:${left ? 'flex-start' : 'center'};text-align:${left ? 'left' : 'center'};padding:clamp(48px,8vw,120px) clamp(20px,6vw,96px);gap:4px;opacity:0;transform:translateY(18px);transition:opacity .7s .9s,transform .7s .9s cubic-bezier(.2,.8,.2,1)}
 :host([data-in]) .in{opacity:1;transform:none}
 ::slotted(h1){margin:0 0 .25em!important;font-weight:800!important;font-size:clamp(40px,7vw,104px)!important;line-height:.95!important;letter-spacing:-.04em!important;text-shadow:0 4px 0 rgba(0,0,0,.35),0 0 40px rgba(0,0,0,.35)}
@@ -12485,9 +12553,9 @@ class PiixHeroElement extends HTMLElement {
 .cue{position:absolute;z-index:2;left:50%;bottom:22px;width:12px;height:12px;margin-left:-6px;border-right:4px solid #fff;border-bottom:4px solid #fff;transform:rotate(45deg);opacity:.7;animation:cue 1.6s steps(4) infinite}
 @keyframes cue{50%{transform:translateY(6px) rotate(45deg)}}
 @media (prefers-reduced-motion:reduce){.in{transition:none;opacity:1;transform:none}.cue{animation:none}}
-</style><div class="bg">${fx ? `<piix-fx kind="${fx.replace(/"/g, '')}"${pass.replace(/ kind="[^"]*"/, '')} fill></piix-fx>` : sc ? `<piix-scene kind="${sc.replace(/"/g, '')}"${pass.replace(/ kind="[^"]*"/, '')} pixel="${at('pixel') || 4}" fill></piix-scene>` : `<piix-shader${pass} pixel="${at('pixel') || 5}" fill></piix-shader>`}</div><div class="veil"></div><div class="in" part="content"><slot></slot></div><i class="cue" aria-hidden="true"></i>`;
-    const sh = this.shadowRoot.querySelector('piix-shader, piix-scene, piix-fx');
-    if (!fx) sh._introLen = 1.2;
+</style><div class="bg">${img ? `<piix-image-fx effect="alive" src="${img.replace(/"/g, '')}"${this.hasAttribute('palette') ? ` palette="${at('palette')}"` : ''} alt="" height="100%" style="position:absolute;inset:0"></piix-image-fx>` : fx ? `<piix-fx kind="${fx.replace(/"/g, '')}"${pass.replace(/ kind="[^"]*"/, '')} fill></piix-fx>` : sc ? `<piix-scene kind="${sc.replace(/"/g, '')}"${pass.replace(/ kind="[^"]*"/, '')} pixel="${at('pixel') || 4}" fill></piix-scene>` : `<piix-shader${pass} pixel="${at('pixel') || 5}" fill></piix-shader>`}</div><div class="veil"></div><div class="in" part="content"><slot></slot></div><i class="cue" aria-hidden="true"></i>`;
+    const sh = this.shadowRoot.querySelector('piix-shader, piix-scene, piix-fx, piix-image-fx');
+    if (sh && !fx && !img) sh._introLen = 1.2;
   }
 }
 define('piix-hero', PiixHeroElement);
@@ -12502,16 +12570,61 @@ ELEMENTS.hero = 'piix-hero';
  * Smooth, full-resolution GPU image effects, the kind you see on award-winning sites: the image
  * turns to liquid and bulges toward the pointer, splits into red and blue when you move fast,
  * ripples like water, smears into long streaks of light, zooms in a blur, or melts from one
- * picture into a second one through a glowing edge. It crops like object-fit: cover.
+ * picture into a second one through a glowing edge, hides behind hammered glass with a clear window
+ * that follows the pointer, or breaks into rows of glitching glyphs. It crops like object-fit: cover.
  * Images must be on your site or served with CORS.
  *
  *   src, src2 the image, and a second one for morph
  *   alt       what it shows
- *   effect    liquid | rgb | morph | ripple | streak | zoom      default: liquid
+ *   effect    alive | liquid | rgb | morph | ripple | streak | zoom | frosted | code   default: liquid
+ *             alive keeps the picture as it is and brings it to life: depth parallax, breathing glow,
+ *             heat haze over the hot parts, bloom, a slow light sweep and grain
  *   auto      morph back and forth on its own instead of on hover
  *   palette   the glow colours (morph edge, streak light)      default: sunset
  *   height    any CSS length (default: the image's own shape)  */
 const IFX = {
+  alive: `float L(vec2 c){return dot(IMG(c,0.),vec3(.3,.59,.11));}
+    float soft(vec2 c){float s=0.;for(int i=0;i<8;i++){float a=float(i)*.785;s+=L(c+vec2(cos(a),sin(a))*.03);}return s/8.;}
+    vec3 shade(vec2 c){float t=u_time;
+    float d=soft(c);
+    vec2 m=(u_mouse-.5)*u_hover+vec2(sin(t*.23),cos(t*.19))*.35;
+    vec2 cp=.5+(c-.5)*(.97+.012*sin(t*.31))+vec2(sin(t*.17),cos(t*.13))*.006;
+    cp-=m*(d-.25)*.05;
+    float hot=smoothstep(.45,.95,soft(cp-vec2(0.,.04)));
+    cp+=vec2(sin(cp.y*60.-t*5.)+sin(cp.y*23.+cp.x*9.-t*3.),0.)*.0016*hot;
+    cp.y+=sin(cp.x*40.+t*2.)*.0008*hot;
+    vec3 col=IMG(cp,0.);
+    float lum=dot(col,vec3(.3,.59,.11)),glow=smoothstep(.55,1.,lum);
+    float flick=.85+.15*sin(t*7.+cp.y*30.)*sin(t*3.3+cp.x*17.)+.1*sin(t*1.3);
+    col+=col*glow*(flick-.85)*1.8;
+    vec3 bloom=vec3(0.);for(int i=0;i<10;i++){float a=float(i)*.628;vec3 s=IMG(cp+vec2(cos(a),sin(a))*.02,0.);bloom+=max(s-.6,0.);}
+    col+=bloom/10.*mix(vec3(1.),pal(.8),.5)*(.9+.4*sin(t*2.1));
+    float sw=smoothstep(.12,0.,abs(fract(t*.05)*2.4-.7-(c.x+c.y*.4)));
+    col+=pal(1.)*sw*.06*(.5+d);
+    col*=1.-.3*smoothstep(.45,.95,length((c-.5)*vec2(1.2,1.)));
+    col+=(hash(c*u_res+fract(t*7.)*91.)-.5)*.06;
+    return col;}`,
+  frosted: `float bump(vec2 c){return tn(c*u_res*.35)*.6+tn(c*u_res*.8+7.)*.4;}
+    vec3 shade(vec2 c){float ar=u_res.x/u_res.y;vec2 e=vec2(1.5,0.)/u_res;float b0=bump(c);
+    vec2 g=vec2(bump(c+e.xy)-b0,bump(c+e.yx)-b0);vec2 cc=c+g*.06;
+    vec3 col=vec3(0.);
+    for(int i=0;i<12;i++){float a=float(i)*.5236,rr=.006+.012*fract(float(i)*.37);col+=IMG(cc+vec2(cos(a),sin(a))*rr,0.);}
+    col=col/12.;col=mix(col,vec3(dot(col,vec3(.33))),.15)*(.9+.25*(b0-.5))+vec3(.06)*smoothstep(.55,.9,b0);
+    vec2 d=(c-u_mouse)*vec2(ar,1.);float sq=max(abs(d.x),abs(d.y)),w=.2*smoothstep(0.,.6,u_hover);
+    if(w>.01&&sq<w)return IMG(c,0.);
+    return col+vec3(.9)*step(w,sq)*step(sq,w+.0025)*step(.01,w);}`,
+  code: `vec3 spec(float x){return clamp(abs(fract(x+vec3(0.,.67,.33))*6.-3.)-1.,0.,1.);}
+    vec3 shade(vec2 c){vec2 px=c*u_res;float rh=8.,cw=6.;float row=floor(px.y/rh);
+    float burst=step(.82,hash(vec2(row*.13,floor(u_time*2.5))));
+    float near=exp(-pow((c.y-u_mouse.y)*9.,2.))*u_hover;
+    float x=px.x+(hash(vec2(row,floor(u_time*3.)))-.5)*120.*burst+(hash(vec2(row,7.))-.5)*90.*near;
+    float ch=floor(x/cw);vec2 f=vec2(mod(x,cw),mod(px.y,rh));
+    vec3 im=IMG(vec2((ch+.5)*cw,(row+.5)*rh)/u_res,0.);float lum=dot(im,vec3(.3,.59,.11));
+    float gx=floor(f.x/(cw/3.)),gy=floor(f.y/((rh-2.)/4.));
+    float on=step(.45,hash(vec2(ch*3.+gx,row*5.+gy+floor(u_time*5.+ch*.13))))*step(f.x,cw-1.5)*step(f.y,rh-2.5);
+    float vis=step(.12,lum)*step(hash(vec2(ch,row*3.1)),lum*1.6);
+    vec3 col=mix(im*1.5,spec(fract(lum*.8+row*.006-u_time*.04)),.35);
+    return col*on*vis;}`,
   liquid: `vec3 shade(vec2 c){vec2 m=u_mouse,d=c-m;float t=u_time;
     c+=.02*(.5+u_hover)*vec2(sin(c.y*11.+t*1.2),cos(c.x*9.-t*1.1));
     c-=d*exp(-dot(d,d)*28.)*.22*u_hover;
@@ -12536,6 +12649,7 @@ const IFX = {
     return acc/14.;}`
 };
 const IFX_HEAD = `
+float tn(vec2 p){return hash(floor(p))*.5+hash(floor(p*.5))*.3+hash(floor(p*.25))*.2;}
 vec3 IMG(vec2 c,float which){c=clamp(c,.001,.999);return texture2D(u_tex,vec2(c.x*.5+which*.5,c.y)).rgb;}
 `;
 const IFX_TAIL = `
