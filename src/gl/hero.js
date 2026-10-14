@@ -1,4 +1,4 @@
-/* HERO: a whole hero section on a GPU pixel background.   @component hero  @needs shader  @needs scene  @needs fx
+/* HERO: a whole hero section on a GPU pixel background.   @component hero  @needs shader  @needs scene  @needs fx  @needs image-fx
  *
  *   <piix-hero kind="horizon">
  *     <p class="eyebrow">New · v1.0</p>
