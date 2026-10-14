@@ -359,7 +359,7 @@ UI.push(...FX_PAGES);
 SECTIONS.splice(SECTIONS.indexOf('Layouts') + 1, 0, '3D & Shaders', 'Image effects');
 
 /* ---------- ready-made 3D hero sections ---------- */
-import { HERO_PAGES, HERO_CSS, IMAGE_HERO_PAGES } from './ui-heroes.mjs';
-UI.push(...HERO_PAGES, ...IMAGE_HERO_PAGES);
+import { HERO_PAGES, HERO_CSS, IMAGE_HERO_PAGES, DOT_HERO_PAGES } from './ui-heroes.mjs';
+UI.push(...HERO_PAGES, ...IMAGE_HERO_PAGES, ...DOT_HERO_PAGES);
 SECTIONS.splice(SECTIONS.indexOf('3D & Shaders'), 0, 'Hero sections');
 export { HERO_CSS };
