@@ -1,10 +1,5 @@
 // Pixel UI docs: ready-made 3D hero sections. Each one is a <piix-fx> plus a small layout you copy.
 const H = [
-  ["hero-visor","Visor hero","visor","A silhouette behind hammered glass with a glowing orange visor.","<section class=\"hx hx-visor\">\n  <piix-fx kind=\"visor\" fill></piix-fx>\n  <p class=\"hx-k\">Collection 04 · Anonymous</p>\n  <h1>Seen through<br>the glass.</h1>\n</section>"],
-  ["hero-hood","Hooded figure hero","hood","An orange poster: a hooded figure behind glass, with a clear window that follows the pointer.","<section class=\"hx hx-hood\">\n  <piix-fx kind=\"hood\" fill></piix-fx>\n  <p class=\"hx-k\">Made by you</p>\n  <h1>Look closer.</h1>\n</section>"],
-  ["hero-bust","Burning bust hero","bust","A carved bust in profile with iridescent flames rising from its head.","<section class=\"hx hx-bust\">\n  <piix-fx kind=\"bust\" fill></piix-fx>\n  <h1>Ideas that<br><i>catch fire.</i></h1>\n  <p class=\"hx-k\">Conference · 2026</p>\n</section>"],
-  ["hero-ghost","Motion blur hero","ghost","A profile in violet haze, trailing light as it moves.","<section class=\"hx hx-ghost\">\n  <piix-fx kind=\"ghost\" fill></piix-fx>\n  <p class=\"hx-k\">New single</p>\n  <h1>Afterimage</h1>\n</section>"],
-  ["hero-codehead","Code portrait hero","codehead","A profile built from rows of glitching colour glyphs.","<section class=\"hx hx-code\">\n  <piix-fx kind=\"codehead\" fill></piix-fx>\n  <h1>ONE FLAIR<br>DESIGN.</h1>\n</section>"],
   ['hero-laser', 'Laser hero', 'beam', 'Lasers strike a rocky peak; the headline sits in the haze above.',
 `<section class="hx hx-laser">
   <piix-fx kind="beam" fill></piix-fx>
@@ -79,16 +74,6 @@ export const HERO_CSS = `.hx{position:relative;min-height:520px;overflow:hidden;
 .hx-por{background:#e4e2df;color:#111;grid-template-columns:1fr 1fr;align-items:center;align-content:center;padding:0}
 .hx-por piix-image-fx{height:520px}
 .hx-por .hx-copy{padding:40px}
-.hx-visor{background:#d4d4d8;color:#fff}
-.hx-visor h1,.hx-visor p{mix-blend-mode:difference}
-.hx-hood{background:#ff5a12;align-content:start;padding-top:60px}
-.hx-bust{background:#2a323c;align-content:center}
-.hx-bust h1{font:400 clamp(52px,8vw,110px)/.88 "Instrument Serif",serif}
-.hx-bust i{color:#ffb35a}
-.hx-ghost{background:#4a2a96;justify-items:end;text-align:right}
-.hx-ghost h1{font-weight:300;letter-spacing:-.04em}
-.hx-code{background:#000;justify-items:end;text-align:right}
-.hx-code h1{color:#5a5a62;font-weight:800;letter-spacing:-.04em}
 @media (max-width:760px){.hx-disc,.hx-por{grid-template-columns:1fr}}`;
 const page = ([slug, name, fx, brief, demo]) => ({
   slug, name, section: 'Hero sections', tag: fx === 'image' ? 'piix-image-fx' : 'piix-fx', file: fx === 'image' ? 'image-fx' : 'fx', brief,

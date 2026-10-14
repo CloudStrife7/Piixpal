@@ -1,10 +1,5 @@
 // Pixel UI docs: the smooth side. One page per <piix-fx> kind, one per image effect.
 const FX = [
-  ['visor', 'Visor', 'A dark silhouette behind hammered glass, with a glowing orange visor.', false, 'A head-and-shoulders figure seen through heavily textured glass, blurred and bent by every bump, with one luminous band across the eyes that pulses. It leans with the pointer.'],
-  ['hood', 'Hooded figure', 'A hooded figure behind textured glass, with a clear window that follows the pointer.', false, 'An orange poster: a hooded silhouette behind hammered glass. A sharp, clear square follows your pointer and shows what is behind the glass, framed in a thin line.'],
-  ['bust', 'Burning bust', 'A carved bust in profile, with iridescent flames rising from its head.', false, 'A dark stone bust with draped cloth, its head broken open into soft, colour-shifting fire and drifting sparks. The pointer leans the flames.'],
-  ['ghost', 'Afterimage', 'A profile in violet haze, trailing streaks of light.', false, 'A side profile dissolving into horizontal motion blur, with a warm rim of light along the face and streaks drifting through. Hover and the blur stretches further.'],
-  ['codehead', 'Code portrait', 'A profile built from rows of glitching colour glyphs.', false, 'A side profile drawn entirely in tiny colour glyph blocks that flicker and glitch sideways in bursts, trailing off to the left. The rows near the pointer slide apart.'],
   ['beam', 'Laser peak', 'A bundle of laser lines striking a rocky peak in a red haze.', false,
     'Thin laser lines flicker down out of a glowing orange fog and strike a raymarched mound of rock, lighting it from above. The beams drift with the pointer. A hero for anything that should feel like an event.'],
   ['disc', 'Disc', 'A spinning disc with a diffraction rainbow sweeping across it.', true,
@@ -58,7 +53,7 @@ const fxPage = ([kind, name, brief, floats, about]) => ({
     { name: 'In your colours', demo: `<div class="ex-row">\n  <piix-fx kind="${kind}" palette="sunset" height="200px"></piix-fx>\n  <piix-fx kind="${kind}" palette="ocean" height="200px"></piix-fx>\n  <piix-fx kind="${kind}" palette="#050505,#1f1f24,#5a5a66,#bdbdc7,#ffffff" height="200px"></piix-fx>\n</div>`, stage: { pad: 0 } }
   ],
   props: [
-    ['kind', ['visor', 'hood', 'bust', 'ghost', 'codehead', 'beam', 'disc', 'flame', 'blob', 'glass', 'podium', 'ink', 'aura', 'reeded', 'orb', 'silk', 'morph', 'terrain', 'tunnel', 'waves', 'clouds', 'caustics', 'gradient', 'swarm'].map(k => `<code>${k}</code>`).join(' '), 'blob'],
+    ['kind', ['beam', 'disc', 'flame', 'blob', 'glass', 'podium', 'ink', 'aura', 'reeded', 'orb', 'silk', 'morph', 'terrain', 'tunnel', 'waves', 'clouds', 'caustics', 'gradient', 'swarm'].map(k => `<code>${k}</code>`).join(' '), 'blob'],
     ['palette', 'tint it: a palette name or your own colours, dark to light', "the kind's own"],
     ['bg', '<code>none</code>: just the object (blob, glass, disc, orb, morph, swarm)', ''],
     ['quality', '1 is full resolution; lower is faster', '.75'],
