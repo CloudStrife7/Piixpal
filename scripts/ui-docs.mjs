@@ -207,13 +207,13 @@ const THUMB = {
   'tooltip': '<span class="t-tip">Copy link</span>'
 };
 const thumb = u => u.section === 'Scenes' ? u.demo.replace('height="460px"', 'height="100%" pixel="3"')
-  : u.section === 'Layouts' ? `<div class="scaled">${u.demo}</div>`
+  : u.section === 'Layouts' || u.section === 'Hero sections' ? `<div class="scaled">${u.demo}</div>`
   : u.section === '3D & Shaders' ? u.demo.replace('height="480px"', 'height="100%" quality=".5"')
   : u.section === 'Image effects' ? u.demo.replace('height="440px"', 'height="100%"').replace('"../site/', '"../site/')
   : u.section === 'Backgrounds' ? u.demo.replace('height="420px"', 'height="100%"')
   : u.section === 'Text' && u.tag === 'piix-text' ? u.demo.replace('ex-h1', 'ex-h3')
   : THUMB[u.slug] || u.demo;
-const lightThumb = u => u.stage && u.stage.light && u.section !== 'Layouts';
+const lightThumb = u => u.stage && u.stage.light && u.section !== 'Layouts' && u.section !== 'Hero sections';
 const indexBody = `${head([], 'Pixel UI', `A component library drawn on the GPU. Backgrounds, heroes, buttons, cards, text effects and form controls, all rendered on a pixel grid and dithered into a palette. ${UI.length} components, each one a plain web component: one script tag, then copy a tag.`,
   `<div class="pills">${bySection.map(([s, l]) => `<a class="pill" href="#${slug(s)}">${s} · ${l.length}</a>`).join('')}</div>`)}
 <div class="ui-why">
