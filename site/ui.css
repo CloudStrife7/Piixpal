@@ -158,3 +158,4 @@
 .ui-thumb .t-toast{display:flex;gap:10px;align-items:center;padding:12px 14px;background:#17121f;box-shadow:inset 0 0 0 2px #2c2438;font:500 13px/1 "Bricolage Grotesque";border-bottom:3px solid #9be15d}
 .ui-thumb .t-toast i{width:14px;height:14px;background:#9be15d}
 .ui-thumb .t-tip{padding:8px 11px;background:#f2eef8;color:#17121f;font:500 13px/1 "Bricolage Grotesque"}
+.ui-thumb > piix-fx,.ui-thumb > piix-image-fx{position:absolute;inset:0;width:100%}

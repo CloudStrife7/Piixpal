@@ -22,7 +22,7 @@ const CDN = `https://cdn.jsdelivr.net/npm/piixpal@${VERSION}`;
 const START = [['index', 'Introduction'], ['showcase', 'Showcase'], ['installation', 'Installation'], ['looks', 'Looks'], ['palettes', 'Palettes']];
 const bySection = SECTIONS.map(s => [s, UI.filter(u => u.section === s)]);
 const ORDER = [...START.map(([s]) => s), ...bySection.flatMap(([, l]) => l.map(u => u.slug))];
-const nameOf = s => (START.find(x => x[0] === s) || [])[1] || UI.find(u => u.slug === s).name;
+const nameOf = s => (START.find(x => x[0] === s) || [])[1] || (UI.find(u => u.slug === s) || { name: s }).name;
 const href = s => s === 'index' ? './' : s + '.html';
 
 /* ---------- layout ---------- */
@@ -207,6 +207,8 @@ const THUMB = {
 };
 const thumb = u => u.section === 'Scenes' ? u.demo.replace('height="460px"', 'height="100%" pixel="3"')
   : u.section === 'Layouts' ? `<div class="scaled">${u.demo}</div>`
+  : u.section === '3D & Shaders' ? u.demo.replace('height="480px"', 'height="100%" quality=".5"')
+  : u.section === 'Image effects' ? u.demo.replace('height="440px"', 'height="100%"').replace('"../site/', '"../site/')
   : u.section === 'Backgrounds' ? u.demo.replace('height="420px"', 'height="100%"')
   : u.section === 'Text' && u.tag === 'piix-text' ? u.demo.replace('ex-h1', 'ex-h3')
   : THUMB[u.slug] || u.demo;
@@ -284,6 +286,10 @@ ${pager('looks')}`;
 
 /* ---------- showcase: whole pages built with Pixel UI ---------- */
 const SHOWCASE = [
+  ['esc', 'esc.', 'Glass product launch', 'A keyboard brand on pure black: a glass keycap turning in the hero and splitting light into colour, reeded-glass and caustic feature tiles, pixel keycaps you can press, and a chrome button.', ['fx-glass', 'fx-reeded', 'fx-caustics', 'fx-aura', 'keycap', 'glow-button']],
+  ['monolith', 'Monolith', 'Luxury product page', 'A speaker cut from stone: a floating slab in a spotlight, thin wide-spaced type, specs on hairlines, a streaked photo gallery and a grey aura band.', ['fx-podium', 'image-streak', 'image-zoom', 'fx-silk', 'fx-aura']],
+  ['nova', 'Nova', 'AI product', 'An AI that lives in a breathing orb: a glass input in the hero, glowing line waves with live counters, glow cards, a particle swarm and a chart.', ['fx-orb', 'fx-waves', 'fx-swarm', 'counter', 'glow-card', 'input', 'chart']],
+  ['ember', 'Ember Studio', 'Creative studio', 'Red marbled ink behind big serif type, a project grid where every photo morphs, splits, melts or streaks on hover, and a reeded-glass contact block.', ['fx-ink', 'image-morph', 'image-rgb', 'image-liquid', 'image-streak', 'fx-reeded']],
   ['summit', 'Summit', 'Clean product page', 'An ordinary, calm SaaS page. The only pixels are landscapes: alps rising out of the hero with the sky cut out, scene cards instead of stock photos, and a vista dissolving into the footer.', ['alps', 'vista', 'lake', 'castle', 'poppies', 'counter', 'button']],
   ['riso', 'Night Roads', 'Two-ink riso magazine', 'Blue ink on warm paper, everywhere. The riso scenes are the cover art; a serif, hairline rules and a paper grain do the rest.', ['riso-rays', 'riso-vortex']],
   ['bloom', 'Bloom', 'Lo-fi music app', 'A full sakura hero with shine text, then soft glassy cards over a dark page, a marquee, pal toggles and a sticky player with a running progress bar.', ['sakura', 'hero', 'shine-text', 'marquee', 'toggle', 'progress', 'loader', 'cursor']],
