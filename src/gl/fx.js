@@ -167,6 +167,73 @@ vec4 fx(vec2 uv){
   col=mix(col,pal(.2),smoothstep(.25,.0,abs(y-.55))*.6);
   col*=1.-.35*smoothstep(.4,1.,length(p*vec2(.7,1.)));
   return vec4(col,1.);}`],
+  beam: ['#050100,#2a0700,#8a1d00,#ff4d00,#ff9a3c,#fff0c8', false, `
+float map(vec3 p){
+  vec3 q=p-vec3(0.,-1.75,0.);q.xz*=rot(.4+MS().x*.2);
+  float d=length(q*vec3(.62,1.05,.75))-1.35;
+  d+=.2*fb3(q*2.3)+.06*fb3(q*6.5);
+  return min(d*.65,p.y+1.9);}` + FX_MARCH + `
+float laser(vec2 p){
+  float s=0.;
+  for(int i=0;i<16;i++){float fi=float(i),h=fract(sin(fi*12.9898)*43758.5);
+    float x=(h-.5)*.36+.012*sin(u_time*(1.+h)+fi)+MS().x*.06;
+    float fl=.55+.45*sin(u_time*(6.+h*9.)+fi*3.1);
+    float w=abs(p.x-x);s+=(exp(-w*1300.)*1.8+exp(-w*90.)*.3+exp(-w*14.)*.05)*fl;}
+  return s;}
+vec4 fx(vec2 uv){
+  vec2 p=P(uv);vec3 ro=vec3(0.,.35,6.),rd=normalize(vec3(p.x,p.y-.05,-2.));
+  vec3 bg=mix(pal(.04),pal(.3),smoothstep(-.6,.8,p.y))+pal(.55)*exp(-abs(p.x)*2.4)*smoothstep(-.3,.6,p.y)*.55;
+  float t=march(ro,rd);
+  vec3 col=bg;
+  if(t<12.){vec3 pp=ro+rd*t,n=nrm(pp);
+    float lit=exp(-length(pp.xz-vec2(MS().x*.4,0.))*1.3)*(max(n.y,0.)+.25);
+    col=mix(pal(.02),pal(.18),max(n.y,0.)*.5)+pal(.7)*lit*1.4+pal(.45)*pow(1.-max(dot(n,-rd),0.),3.)*.35;
+    col=mix(col,bg,1.-exp(-max(t-5.,0.)*.12));
+  }
+  if(t>=12.){float L=laser(p);col+=mix(pal(.75),pal(1.),clamp(L*.4,0.,1.))*L;}
+  return vec4(col,1.);}`],
+
+  disc: ['#000000,#0b0b10,#3a3d48,#c9ccd6,#ffffff', true, `
+vec3 spec(float x){return clamp(abs(fract(x+vec3(0.,.67,.33))*6.-3.)-1.,0.,1.);}
+vec4 fx(vec2 uv){
+  vec2 p=P(uv),m=MS();
+  float ax=-.75+m.y*.5+.06*sin(u_time*.5),ay=.55+m.x*.6+.08*cos(u_time*.4);
+  vec3 n=vec3(0.,0.,1.);n.yz*=rot(ax);n.xz*=rot(ay);
+  vec3 u=normalize(cross(n,vec3(0.,1.,0.)+vec3(.0001))),v=cross(n,u);
+  vec3 ro=vec3(0.,0.,4.2),rd=normalize(vec3(p,-2.));
+  float dn=dot(rd,n);vec3 bg=pal(0.);
+  if(abs(dn)<.001)return vec4(bg,u_k.x>.5?0.:1.);
+  float t=-dot(ro,n)/dn;vec3 q=ro+rd*t;vec2 l=vec2(dot(q,u),dot(q,v));
+  float r=length(l),a=atan(l.y,l.x)+u_time*.6;
+  if(r>1.25||r<.17||t<0.)return vec4(bg,u_k.x>.5?0.:1.);
+  vec3 refl=reflect(rd,n);
+  float la=atan(refl.y,refl.x),sweep=pow(abs(cos(atan(l.y,l.x)-la*1.3-1.)),26.);
+  vec3 col=vec3(.03)+pal(.3)*.12*(.5+.5*sin(r*900.));
+  col+=spec(r*1.6-.25+dot(refl,vec3(.3,.5,.2)))*sweep*1.25;
+  col+=spec(r*2.3+.4)*.06*(.5+.5*sin(r*640.+a*2.));
+  col+=vec3(.6)*pow(max(dot(refl,normalize(vec3(.3,.7,.6))),0.),30.)*.6;
+  if(r<.34){col=vec3(.02)+vec3(.8)*(smoothstep(.006,0.,abs(r-.2))+smoothstep(.004,0.,abs(r-.27))*.6+smoothstep(.003,0.,abs(r-.33))*.4);}
+  col+=vec3(.9)*smoothstep(.012,0.,abs(r-1.24))*.8+spec(a*.3)*smoothstep(.01,0.,abs(r-1.235))*.4;
+  return vec4(col,1.);}`],
+
+  flame: ['#03040a,#0c1530,#ff2e9a,#ff8a1f,#ffe08a,#ffffff', false, `
+vec3 spec(float x){return clamp(abs(fract(x+vec3(0.,.67,.33))*6.-3.)-1.,0.,1.);}
+vec4 fx(vec2 uv){
+  vec2 p=P(uv),m=MS();float t=u_time;
+  vec3 col=mix(pal(0.),pal(.12),uv.y*.6)+pal(.2)*.15*exp(-abs(p.x-m.x*.3)*2.);
+  vec2 q=vec2((p.x-m.x*.35)*1.5,p.y);
+  float f=tf(vec2(q.x*2.,q.y*.9-t*1.5)*2.2)*.65+tf(vec2(q.x*4.6+3.,q.y*2.2-t*2.4)*2.2)*.35;
+  float wisp=tf(vec2(q.x*7.+1.,q.y*3.5-t*3.2)*2.);
+  float body=f*1.5+wisp*.25-(p.y+.62)*1.05-abs(q.x)*1.05;
+  float a=smoothstep(-.08,.45,body),hot=smoothstep(.35,.9,body);
+  float ht=clamp((p.y+.5)*1.05-hot*.25,0.,1.);
+  vec3 c=ht<.3?mix(pal(.95),pal(.8),ht/.3):ht<.6?mix(pal(.8),pal(.62),(ht-.3)/.3):mix(pal(.62),pal(.43),(ht-.6)/.4);
+  c=mix(c,spec(fract(f*1.6+p.y*.5-t*.08)),.1*(1.-hot))*1.15;
+  col=col*(1.-a*.85)+c*a*(.7+hot*.35);
+  col+=pal(.6)*.18*exp(-max(-body,0.)*6.)*smoothstep(-.7,.1,p.y);
+  for(int i=0;i<24;i++){float fi=float(i),h=fract(sin(fi*91.3)*4375.5),y=fract(h*7.+t*(.15+h*.2))*1.6-.6;
+    vec2 sp=vec2((h-.5)*.9+sin(t+fi)*.05+m.x*.3,y);col+=spec(h+t*.1)*exp(-length(p-sp)*260.)*(1.-y*.5);}
+  return vec4(col,1.);}`],
   orb: ['#04030a,#1d1452,#4f46e5,#22d3ee,#f0abfc,#ffffff', true, `
 vec4 fx(vec2 uv){
   vec2 p=P(uv)-MS()*.06;float t=u_time;
