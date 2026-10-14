@@ -54,6 +54,14 @@
       <a href="horizon-band.html">Horizon band</a><a href="window.html">Window</a><a href="split-hero.html">Split hero</a><a href="fade-into-page.html">Fade into page</a><a href="scene-cards.html">Scene cards</a><a href="riso-editorial.html">Riso editorial</a>
     </details>
     <details class="sg" open>
+      <summary><a href="./#3d-shaders">3D & Shaders</a><span class="n">16</span></summary>
+      <a href="fx-blob.html">Liquid chrome</a><a href="fx-glass.html">Glass keycap</a><a href="fx-podium.html">Stone podium</a><a href="fx-ink.html">Marbled ink</a><a href="fx-aura.html">Aura</a><a href="fx-reeded.html">Reeded glass</a><a href="fx-orb.html">Orb</a><a href="fx-silk.html">Silk</a><a href="fx-morph.html">Morphing shape</a><a href="fx-terrain.html">Mountain flight</a><a href="fx-tunnel.html">Neon tunnel</a><a href="fx-waves.html">Line waves</a><a href="fx-clouds.html">Clouds</a><a href="fx-caustics.html">Caustics</a><a href="fx-gradient.html">Mesh gradient</a><a href="fx-swarm.html">Particle swarm</a>
+    </details>
+    <details class="sg" open>
+      <summary><a href="./#image-effects">Image effects</a><span class="n">6</span></summary>
+      <a href="image-liquid.html">Liquid image</a><a href="image-rgb.html">Colour split</a><a href="image-morph.html">Image morph</a><a href="image-ripple.html">Ripple</a><a href="image-streak.html">Light streak</a><a href="image-zoom.html">Zoom blur</a>
+    </details>
+    <details class="sg" open>
       <summary><a href="./#backgrounds">Backgrounds</a><span class="n">10</span></summary>
       <a href="mesh-gradient.html">Mesh gradient</a><a href="warp.html">Marble warp</a><a href="aurora.html">Aurora</a><a href="crystal.html">Crystal cells</a><a href="liquid-metal.html">Liquid metal</a><a href="horizon.html">Synthwave horizon</a><a href="nebula.html">Nebula</a><a href="topographic.html">Topographic</a><a href="dot-matrix.html">Dot matrix</a><a href="fire.html">Fire</a>
     </details>
@@ -107,7 +115,7 @@
 <header class="doc-head ui-head">
   <div class="crumbs"><a href="./">Pixel UI</a></div>
   <h1>Pixel UI</h1>
-  <p>A component library drawn on the GPU. Backgrounds, heroes, buttons, cards, text effects and form controls, all rendered on a pixel grid and dithered into a palette. 55 components, each one a plain web component: one script tag, then copy a tag.</p><div class="pills"><a class="pill" href="#scenes">Scenes · 10</a><a class="pill" href="#layouts">Layouts · 6</a><a class="pill" href="#backgrounds">Backgrounds · 10</a><a class="pill" href="#sections">Sections · 3</a><a class="pill" href="#buttons">Buttons · 2</a><a class="pill" href="#cards">Cards · 1</a><a class="pill" href="#text">Text · 8</a><a class="pill" href="#media">Media · 1</a><a class="pill" href="#forms">Forms · 4</a><a class="pill" href="#navigation">Navigation · 1</a><a class="pill" href="#overlays">Overlays · 3</a><a class="pill" href="#feedback">Feedback · 2</a><a class="pill" href="#data">Data · 2</a><a class="pill" href="#motion">Motion · 2</a></div>
+  <p>A component library drawn on the GPU. Backgrounds, heroes, buttons, cards, text effects and form controls, all rendered on a pixel grid and dithered into a palette. 77 components, each one a plain web component: one script tag, then copy a tag.</p><div class="pills"><a class="pill" href="#scenes">Scenes · 10</a><a class="pill" href="#layouts">Layouts · 6</a><a class="pill" href="#3d-shaders">3D & Shaders · 16</a><a class="pill" href="#image-effects">Image effects · 6</a><a class="pill" href="#backgrounds">Backgrounds · 10</a><a class="pill" href="#sections">Sections · 3</a><a class="pill" href="#buttons">Buttons · 2</a><a class="pill" href="#cards">Cards · 1</a><a class="pill" href="#text">Text · 8</a><a class="pill" href="#media">Media · 1</a><a class="pill" href="#forms">Forms · 4</a><a class="pill" href="#navigation">Navigation · 1</a><a class="pill" href="#overlays">Overlays · 3</a><a class="pill" href="#feedback">Feedback · 2</a><a class="pill" href="#data">Data · 2</a><a class="pill" href="#motion">Motion · 2</a></div>
 </header>
 <div class="ui-why">
   <div><h3>On the GPU</h3><p>Shaders run on one shared WebGL context, drawn at pixel resolution and scaled up crisp.</p></div>
@@ -225,6 +233,102 @@
   </div>
 </section></div></div>
     <h3>Riso editorial</h3><p>A two-ink print look for a magazine or a portfolio.</p>
+  </a>
+</div>
+
+<h2 class="fam-h" id="3d-shaders">3D & Shaders <span class="n">16</span></h2>
+<div class="ui-grid">
+  <a class="ui-card" href="fx-blob.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="blob" height="100%" quality=".5"></piix-fx></div>
+    <h3>Liquid chrome</h3><p>A raymarched blob of liquid metal that morphs, with a droplet that follows the pointer.</p>
+  </a>
+  <a class="ui-card" href="fx-glass.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="glass" height="100%" quality=".5"></piix-fx></div>
+    <h3>Glass keycap</h3><p>A solid-glass keycap, turning in the dark, splitting light into colour.</p>
+  </a>
+  <a class="ui-card" href="fx-podium.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="podium" height="100%" quality=".5"></piix-fx></div>
+    <h3>Stone podium</h3><p>A slab of rough stone floating in a single spotlight, a stage for your product.</p>
+  </a>
+  <a class="ui-card" href="fx-ink.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="ink" height="100%" quality=".5"></piix-fx></div>
+    <h3>Marbled ink</h3><p>Red ink flowing over black, marbled with cream and gold.</p>
+  </a>
+  <a class="ui-card" href="fx-aura.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="aura" height="100%" quality=".5"></piix-fx></div>
+    <h3>Aura</h3><p>Grainy, blurred bands of colour drifting like a long exposure.</p>
+  </a>
+  <a class="ui-card" href="fx-reeded.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="reeded" height="100%" quality=".5"></piix-fx></div>
+    <h3>Reeded glass</h3><p>Light seen through fluted glass: glowing vertical reeds.</p>
+  </a>
+  <a class="ui-card" href="fx-orb.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="orb" height="100%" quality=".5"></piix-fx></div>
+    <h3>Orb</h3><p>A glowing sphere of moving light: the look of an AI that is listening.</p>
+  </a>
+  <a class="ui-card" href="fx-silk.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="silk" height="100%" quality=".5"></piix-fx></div>
+    <h3>Silk</h3><p>Satin folds that flow and catch the light.</p>
+  </a>
+  <a class="ui-card" href="fx-morph.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="morph" height="100%" quality=".5"></piix-fx></div>
+    <h3>Morphing shape</h3><p>A 3D shape that melts from sphere to box to torus to octahedron.</p>
+  </a>
+  <a class="ui-card" href="fx-terrain.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="terrain" height="100%" quality=".5"></piix-fx></div>
+    <h3>Mountain flight</h3><p>A flight over endless mountains at sunset, with fog.</p>
+  </a>
+  <a class="ui-card" href="fx-tunnel.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="tunnel" height="100%" quality=".5"></piix-fx></div>
+    <h3>Neon tunnel</h3><p>An endless neon wormhole that steers with the pointer.</p>
+  </a>
+  <a class="ui-card" href="fx-waves.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="waves" height="100%" quality=".5"></piix-fx></div>
+    <h3>Line waves</h3><p>Dozens of glowing lines forming a living landscape.</p>
+  </a>
+  <a class="ui-card" href="fx-clouds.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="clouds" height="100%" quality=".5"></piix-fx></div>
+    <h3>Clouds</h3><p>Layers of sunset clouds drifting past the sun.</p>
+  </a>
+  <a class="ui-card" href="fx-caustics.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="caustics" height="100%" quality=".5"></piix-fx></div>
+    <h3>Caustics</h3><p>Light dancing on the bottom of a swimming pool.</p>
+  </a>
+  <a class="ui-card" href="fx-gradient.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="gradient" height="100%" quality=".5"></piix-fx></div>
+    <h3>Mesh gradient</h3><p>A smooth, grainy mesh gradient, the clean way.</p>
+  </a>
+  <a class="ui-card" href="fx-swarm.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-fx kind="swarm" height="100%" quality=".5"></piix-fx></div>
+    <h3>Particle swarm</h3><p>Hundreds of points of light orbiting in 3D.</p>
+  </a>
+</div>
+
+<h2 class="fam-h" id="image-effects">Image effects <span class="n">6</span></h2>
+<div class="ui-grid">
+  <a class="ui-card" href="image-liquid.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-image-fx src="../site/pixelui-30-poster.jpg" effect="liquid" alt="A lake at sunset" height="100%"></piix-image-fx></div>
+    <h3>Liquid image</h3><p>The picture turns to liquid and bulges toward the pointer.</p>
+  </a>
+  <a class="ui-card" href="image-rgb.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-image-fx src="../site/pixelui-30-poster.jpg" effect="rgb" alt="A lake at sunset" height="100%"></piix-image-fx></div>
+    <h3>Colour split</h3><p>Move fast and the picture splits into red, green and blue.</p>
+  </a>
+  <a class="ui-card" href="image-morph.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-image-fx src="../site/pixelui-30-poster.jpg" src2="../site/pixelui-launch-poster.jpg" effect="morph" alt="A lake at sunset becoming a launch poster" height="100%"></piix-image-fx></div>
+    <h3>Image morph</h3><p>One picture melts into another through a glowing edge.</p>
+  </a>
+  <a class="ui-card" href="image-ripple.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-image-fx src="../site/pixelui-30-poster.jpg" effect="ripple" alt="A lake at sunset" height="100%"></piix-image-fx></div>
+    <h3>Ripple</h3><p>Water ripples spread from the pointer.</p>
+  </a>
+  <a class="ui-card" href="image-streak.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-image-fx src="../site/pixelui-30-poster.jpg" effect="streak" alt="A lake at sunset" height="100%"></piix-image-fx></div>
+    <h3>Light streak</h3><p>The picture smears into long streaks of light, like a long exposure.</p>
+  </a>
+  <a class="ui-card" href="image-zoom.html">
+    <div class="ui-thumb" aria-hidden="true" inert><piix-image-fx src="../site/pixelui-30-poster.jpg" effect="zoom" alt="A lake at sunset" height="100%"></piix-image-fx></div>
+    <h3>Zoom blur</h3><p>A radial zoom blur that rushes toward the pointer.</p>
   </a>
 </div>
 
