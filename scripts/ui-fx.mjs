@@ -1,5 +1,11 @@
 // Pixel UI docs: the smooth side. One page per <piix-fx> kind, one per image effect.
 const FX = [
+  ['beam', 'Laser peak', 'A bundle of laser lines striking a rocky peak in a red haze.', false,
+    'Thin laser lines flicker down out of a glowing orange fog and strike a raymarched mound of rock, lighting it from above. The beams drift with the pointer. A hero for anything that should feel like an event.'],
+  ['disc', 'Disc', 'A spinning disc with a diffraction rainbow sweeping across it.', true,
+    'A tilted disc with microscopic grooves, a clear hub and a bright rim. As it turns, a rainbow sweeps across the surface the way light does on a real CD. The pointer tilts it.'],
+  ['flame', 'Flame', 'Soft, wispy fire rising out of the dark, with drifting sparks.', false,
+    'Layered flames, white-hot at the base and cooling to red at the tips, with a hint of iridescence at the edges and sparks floating up. The pointer leans the fire.'],
   ['blob', 'Liquid chrome', 'A raymarched blob of liquid metal that morphs, with a droplet that follows the pointer.', true,
     'A soft metaball of chrome, reflecting a studio of softboxes and a bright horizon line, with a thin iridescent sheen. A second droplet orbits it and a third one follows your pointer, merging into the surface like mercury.'],
   ['glass', 'Glass keycap', 'A solid-glass keycap, turning in the dark, splitting light into colour.', true,
