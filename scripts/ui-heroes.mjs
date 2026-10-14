@@ -94,3 +94,12 @@ const IMGH = [
   ['podium', 'Spotlight image hero', 'A product on a spotlit stone, alive: the camera breathes slowly, grain and light drift.', 'Edition of 300', 'Monolith'],
   ['ink', 'Ink image hero', 'An abstract artwork, alive: depth parallax under the pointer, glowing highlights.', 'Brand · Motion · Web', 'We make things that burn bright.']
 ];
+export const IMAGE_HERO_PAGES = IMGH.map(([k, name, brief, kick, title]) => ({
+  slug: 'hero-image-' + k, name, section: 'Hero sections', tag: 'piix-hero', file: 'hero', brief,
+  about: 'Give <code>&lt;piix-hero&gt;</code> any picture with <code>image="…"</code> and it keeps the picture exactly as it is, but brings it to life on the GPU: brighter parts sit nearer and shift with the pointer, glowing areas breathe and bloom, heat haze ripples over the hottest parts, the camera breathes slowly and a soft light sweeps across. Same effect on its own: <code>&lt;piix-image-fx effect="alive"&gt;</code>.',
+  demo: `<piix-hero image="../site/heroes/${k}.jpg" height="520px">\n  <p class="eyebrow">${kick}</p>\n  <h1>${title}</h1>\n  <piix-glow-button look="chrome">Find out more</piix-glow-button>\n</piix-hero>`,
+  code: `<piix-hero image="your-picture.jpg">\n  <p class="eyebrow">${kick}</p>\n  <h1>${title}</h1>\n  <piix-glow-button look="chrome">Find out more</piix-glow-button>\n</piix-hero>`,
+  stage: { pad: 0, block: true, h: 520 },
+  props: [['image', 'any picture (on your site, or served with CORS)', ''], ['palette', 'tints the bloom and the light sweep', 'sunset'], ['height', 'any CSS length', 'min(88vh, 780px)'], ['align', '<code>center</code> or <code>left</code>', 'center']],
+  a11y: ['The words are real HTML.', 'The moving picture is decoration; describe it in your copy if it matters.', 'With reduced motion the picture holds still.']
+}));
