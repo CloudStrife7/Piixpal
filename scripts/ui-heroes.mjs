@@ -111,3 +111,22 @@ export const IMAGE_HERO_PAGES = IMGH.map(([k, name, brief, kick, title]) => ({
   props: [['image', 'any picture (on your site, or served with CORS)', ''], ['palette', 'tints the bloom and the light sweep', 'sunset'], ['height', 'any CSS length', 'min(88vh, 780px)'], ['align', '<code>center</code> or <code>left</code>', 'center']],
   a11y: ['The words are real HTML.', 'The moving picture is decoration; describe it in your copy if it matters.', 'With reduced motion the picture holds still.']
 }));
+
+/* ---------- dot art in motion: <piix-image-fx effect="dots"> as a hero ---------- */
+export const DOT_HERO_PAGES = [{
+  slug: 'hero-dots-statue', name: 'Dot statue hero', section: 'Hero sections', tag: 'piix-image-fx', file: 'image-fx',
+  brief: 'A marble statue in white dots that shimmer, scan and scatter.',
+  about: 'The same dot-art motion in white: every cell of dots flickers, a bright scan rolls down the statue, dots scatter from the pointer and sparks drift off the edges.',
+  demo: "<section class=\"hx hx-dots hx-mono\">\n  <div class=\"hx-copy\"><p class=\"hx-k\">Museum of the future</p><h1>Carved<br>in light.</h1></div>\n  <piix-image-fx src=\"../site/heroes/statue.jpg\" effect=\"dots\" palette=\"mono\" alt=\"A marble statue drawn in white dots\"></piix-image-fx>\n</section>",
+  code: "<section class=\"hx hx-dots hx-mono\">\n  <div class=\"hx-copy\"><p class=\"hx-k\">Museum of the future</p><h1>Carved<br>in light.</h1></div>\n  <piix-image-fx src=\"statue.jpg\" effect=\"dots\" palette=\"mono\" alt=\"A marble statue drawn in white dots\"></piix-image-fx>\n</section>",
+  stage: { pad: 0, block: true, h: 600 },
+  a11y: ['The words are real HTML.', 'The picture is announced with its alt text.', 'With reduced motion the dots hold still.']
+}, {
+  slug: 'hero-dots-cat', name: 'Dot art hero', section: 'Hero sections', tag: 'piix-image-fx', file: 'image-fx',
+  brief: 'A dotted portrait that shimmers, scans and scatters from the pointer.',
+  about: 'Any picture as one-colour dot art in motion: every cell of dots flickers on its own, a bright scan rolls down, dots scatter away from the pointer and sparks drift off the dim edges. Feed it a dithered image like this cat, or any photo.',
+  demo: "<section class=\"hx hx-dots\">\n  <piix-image-fx src=\"../site/heroes/cat.jpg\" effect=\"dots\" palette=\"lime\" alt=\"A cat drawn in green dots\"></piix-image-fx>\n  <div class=\"hx-copy\"><p class=\"hx-k\">Night shift</p><h1>Always<br>watching.</h1></div>\n</section>",
+  code: "<section class=\"hx hx-dots\">\n  <piix-image-fx src=\"cat.jpg\" effect=\"dots\" palette=\"lime\" alt=\"A cat drawn in green dots\"></piix-image-fx>\n  <div class=\"hx-copy\"><p class=\"hx-k\">Night shift</p><h1>Always<br>watching.</h1></div>\n</section>",
+  stage: { pad: 0, block: true, h: 560 },
+  a11y: ['The words are real HTML.', 'The picture is announced with its alt text.', 'With reduced motion the dots hold still.']
+}];
