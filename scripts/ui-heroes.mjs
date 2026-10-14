@@ -75,3 +75,22 @@ export const HERO_CSS = `.hx{position:relative;min-height:520px;overflow:hidden;
 .hx-por piix-image-fx{height:520px}
 .hx-por .hx-copy{padding:40px}
 @media (max-width:760px){.hx-disc,.hx-por{grid-template-columns:1fr}}`;
+const page = ([slug, name, fx, brief, demo]) => ({
+  slug, name, section: 'Hero sections', tag: fx === 'image' ? 'piix-image-fx' : 'piix-fx', file: fx === 'image' ? 'image-fx' : 'fx', brief,
+  about: 'A complete hero section: a moving 3D layer and a layout around it. Copy the markup and the CSS, swap the words, and it is yours. Every hero answers the pointer.',
+  demo: demo.replace('src="portrait.jpg"', 'src="../site/pixelui-launch-poster.jpg"'),
+  code: `${demo}\n\n<style>\n${HERO_CSS.split('\n').filter(l => l.startsWith('.hx{') || l.startsWith('.hx h1') || l.startsWith('.hx p') || l.startsWith('.hx-k') || l.includes('.' + demo.match(/class="hx (hx-\w+)"/)[1])).join('\n')}\n</style>`,
+  stage: { pad: 0, block: true, h: 520 },
+  a11y: ['The words are real HTML headings and paragraphs.', 'The 3D layer is decoration, or described for screen readers when it carries meaning.', 'With reduced motion everything holds still.']
+});
+export const HERO_PAGES = H.map(page);
+
+/* ---------- your own image, brought to life: <piix-hero image="…"> ---------- */
+const IMGH = [
+  ['beam', 'Laser image hero', 'Your still of lasers on rock, alive: the beams flicker and bloom, heat rises off the peak.', 'New drop', 'Strike the summit.'],
+  ['disc', 'Disc image hero', 'A product shot of a disc, alive: the rainbow blooms and breathes, the whole shot drifts in depth.', 'Out Friday', 'Spectrum'],
+  ['flame', 'Fire image hero', 'A photo of fire, alive: the flames flicker, heat haze ripples above them.', 'A studio for loud ideas', 'Burn the old playbook.'],
+  ['glass', 'Glass image hero', 'A glass object on black, alive: its colours glow and pulse, the light sweeps across.', 'Set 001', 'Escape the ordinary.'],
+  ['podium', 'Spotlight image hero', 'A product on a spotlit stone, alive: the camera breathes slowly, grain and light drift.', 'Edition of 300', 'Monolith'],
+  ['ink', 'Ink image hero', 'An abstract artwork, alive: depth parallax under the pointer, glowing highlights.', 'Brand · Motion · Web', 'We make things that burn bright.']
+];
