@@ -93,6 +93,8 @@ export const HERO_PAGES = H.map(page);
 
 /* ---------- your own image, brought to life: <piix-hero image="…"> ---------- */
 const IMGH = [
+  ['statue', 'Statue image hero', 'The dotted marble statue, alive: it breathes in depth and its highlights glow.', 'Exhibition', 'Made to last.'],
+  ['cat', 'Cat image hero', 'The dotted cat, alive: it breathes, glows and drifts in depth.', 'Night shift', 'Always watching.'],
   ['beam', 'Laser image hero', 'Your still of lasers on rock, alive: the beams flicker and bloom, heat rises off the peak.', 'New drop', 'Strike the summit.'],
   ['disc', 'Disc image hero', 'A product shot of a disc, alive: the rainbow blooms and breathes, the whole shot drifts in depth.', 'Out Friday', 'Spectrum'],
   ['flame', 'Fire image hero', 'A photo of fire, alive: the flames flicker, heat haze ripples above them.', 'A studio for loud ideas', 'Burn the old playbook.'],
