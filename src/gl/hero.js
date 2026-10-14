@@ -15,13 +15,14 @@
  *   kind      mesh | warp | aurora | crystal | liquid | horizon | nebula | topo | dots | fire   default: mesh
  *   fx        a smooth realistic shader instead: blob | glass | orb | silk | terrain | tunnel | waves | clouds |
  *             caustics | morph | gradient | swarm | ink | podium | reeded | aura
+ *   image     your own picture, brought to life (depth, glow, haze): any image URL
  *   scene     use an illustrated scene instead: sakura | alps | lake | galaxy | rays | vortex | train | poppies | castle | vista
  *   palette   any palette name or your own colours        default: the kind's own
  *   pixel     size of one background pixel, px             default: 5
  *   align     center | left                                default: center
  *   height    any CSS length                               default: min(88vh, 780px) */
 class PiixHeroElement extends HTMLElement {
-  static get observedAttributes() { return ['kind', 'scene', 'fx', 'palette', 'pixel', 'align', 'height', 'dither', 'speed']; }
+  static get observedAttributes() { return ['kind', 'scene', 'fx', 'image', 'palette', 'pixel', 'align', 'height', 'dither', 'speed']; }
   constructor() { super(); this.attachShadow({ mode: 'open' }); }
   connectedCallback() {
     this._build();
