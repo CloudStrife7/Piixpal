@@ -10,7 +10,7 @@
  * They all answer the pointer, and with bg="none" the objects float on your own page.
  *
  *   kind      blob | glass | orb | silk | terrain | tunnel | waves | clouds | caustics | morph | gradient | swarm
- *             | ink | podium | reeded | aura | beam | disc | flame | visor | hood | bust | ghost | codehead
+ *             | ink | podium | reeded | aura | beam | disc | flame
  *   palette   tint it: any palette name or your own colours, dark to light   default: the kind's own
  *   bg        "none": no background, just the object (blob, glass, orb, morph, swarm)
  *   quality   1 is full resolution, lower is faster                         default: .75
@@ -29,15 +29,6 @@ float sn(vec3 p){return sin(p.x*1.3+sin(p.y*1.7))*sin(p.y*1.1+sin(p.z*1.9))*sin(
 float fb3(vec3 p){float v=0.,a=.5;for(int i=0;i<3;i++){v+=a*sn(p);p=p*2.03+vec3(1.7,9.2,3.1);a*=.5;}return v;}
 float tn(vec2 p){return texture2D(u_tex,(p+.5)/256.).r;}
 float tf(vec2 p){float v=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int i=0;i<5;i++){v+=a*tn(p);p=m*p;a*=.5;}return v;}
-/* figures: a head and shoulders from the front, a hooded figure, and a profile facing right */
-float sdE(vec2 p,vec2 r){return (length(p/r)-1.)*min(r.x,r.y);}
-float sdB(vec2 p,vec2 b){vec2 d=abs(p)-b;return length(max(d,0.))+min(max(d.x,d.y),0.);}
-float figFront(vec2 p){float h=sdE(p-vec2(0.,.26),vec2(.165,.215)),n=sdB(p-vec2(0.,.0),vec2(.085,.12)),s=sdE(p-vec2(0.,-.66),vec2(.6,.55));return smin(smin(h,n,.05),s,.13);}
-float figHood(vec2 p){float h=sdE(p-vec2(0.,.24),vec2(.225,.29)),s=sdE(p-vec2(0.,-.66),vec2(.62,.6));return smin(h,s,.2);}
-float figSide(vec2 p){
-  float sk=sdE(p-vec2(-.04,.3),vec2(.18,.185)),fc=sdE(p-vec2(.06,.22),vec2(.105,.16)),ns=sdE(p-vec2(.16,.23),vec2(.03,.035));
-  float ch=sdE(p-vec2(.08,.1),vec2(.07,.05)),nk=sdB((p-vec2(.0,-.02))*mat2(.96,.28,-.28,.96),vec2(.09,.13)),sh=sdE(p-vec2(-.06,-.66),vec2(.56,.52));
-  return smin(smin(smin(smin(sk,fc,.05),min(ns,ch),.03),nk,.05),sh,.1);}
 /* a studio: a soft sky, a key softbox, a fill light and a bright horizon line for chrome to catch */
 vec3 envc(vec3 rd){
   vec3 c=mix(pal(.06),pal(.45),smoothstep(-.6,.9,rd.y));
@@ -242,115 +233,6 @@ vec4 fx(vec2 uv){
   col+=pal(.6)*.18*exp(-max(-body,0.)*6.)*smoothstep(-.7,.1,p.y);
   for(int i=0;i<24;i++){float fi=float(i),h=fract(sin(fi*91.3)*4375.5),y=fract(h*7.+t*(.15+h*.2))*1.6-.6;
     vec2 sp=vec2((h-.5)*.9+sin(t+fi)*.05+m.x*.3,y);col+=spec(h+t*.1)*exp(-length(p-sp)*260.)*(1.-y*.5);}
-  return vec4(col,1.);}`],
-  visor: ['#0a0a0c,#3a3a40,#9a9aa2,#d4d4d8,#ff5a1f,#ffb27a', false, `
-vec4 fx(vec2 uv){
-  vec2 p=P(uv),m=MS();float t=u_time;
-  vec2 q=p*1.15+vec2(0.,.02);
-  vec2 hb=uv*u_res*.055;float h0=tn(hb)+.5*tn(hb*2.1+3.);
-  vec2 g=vec2(h0-tn(hb+vec2(.25,0.))-.5*tn((hb+vec2(.25,0.))*2.1+3.),h0-tn(hb+vec2(0.,.25))-.5*tn((hb+vec2(0.,.25))*2.1+3.));
-  vec2 w=q+g*.09;
-  float d=figFront(w-vec2(m.x*.02,0.)),k=smoothstep(.06,-.05,d);
-  vec3 bg=mix(pal(.75),pal(.55),smoothstep(-.2,.9,length(p*vec2(.8,1.))))+vec3(.08)*(h0-.75);
-  vec3 col=mix(bg,pal(0.)+pal(.2)*.3*(h0-.4),k);
-  vec2 vp=q+g*.012-vec2(m.x*.03,.27+m.y*.02);
-  float band=smoothstep(.04,.0,abs(vp.y)-.032)*smoothstep(.02,-.02,abs(vp.x)-.205);
-  float pulse=.82+.18*sin(t*2.2)+.06*sin(t*13.)*sin(t*7.);
-  vec3 hot=mix(pal(.8),pal(1.),smoothstep(.02,0.,abs(vp.y)));
-  col=mix(col,hot*pulse*1.25,band);
-  col+=pal(.8)*exp(-max(abs(vp.y)-.03,0.)*14.)*smoothstep(.45,.15,abs(vp.x))*.35*pulse;
-  col+=vec3(.05)*smoothstep(.9,1.3,h0);
-  return vec4(col,1.);}`],
-
-  hood: ['#120402,#3a1206,#c23a0a,#ff5a12,#ff9a4a,#ffd9b0', false, `
-vec4 fx(vec2 uv){
-  vec2 p=P(uv),m=MS();float t=u_time;
-  vec2 q=p*1.1+vec2(.08,.06);
-  vec2 hb=uv*u_res*.055;float n0=tn(hb)+.5*tn(hb*2.1+3.);
-  vec2 g=vec2(n0-tn(hb+vec2(.25,0.))-.5*tn((hb+vec2(.25,0.))*2.1+3.),n0-tn(hb+vec2(0.,.25))-.5*tn((hb+vec2(0.,.25))*2.1+3.));
-  vec2 w=q+g*.1+vec2(sin(t*.4),cos(t*.3))*.006;
-  float d=figHood(w),k=smoothstep(.07,-.06,d);
-  vec3 bg=mix(pal(.68),pal(.5),smoothstep(-.4,.9,p.y*.5+length(p)*.6))+pal(.85)*.1*(n0-.75);
-  vec3 col=mix(bg,pal(.04)+pal(.3)*.3*(n0-.4),k*.95);
-  vec2 c=m*.9+vec2(-.05,.12);vec2 dd=abs(q-c);float s=max(dd.x,dd.y),R=.13;
-  if(s<R){float k2=smoothstep(.004,-.004,figHood(q));
-    vec3 sharp=mix(bg*1.05,pal(.02),k2);
-    float face=smoothstep(.1,0.,length((q-vec2(.03,.2))*vec2(1.25,1.)))*k2*smoothstep(-.02,.08,q.x+.04);
-    sharp=mix(sharp,mix(pal(.35),pal(.95),smoothstep(-.05,.08,q.x-.0)),face*.8);
-    col=sharp;}
-  col=mix(col,vec3(.95),smoothstep(.002,0.,abs(s-R))*step(s,R+.003));
-  return vec4(col,1.);}`],
-
-  bust: ['#0d1014,#2a323c,#5b6672,#b8c2cc,#eef2f4', false, `
-vec3 spec(float x){return clamp(abs(fract(x+vec3(0.,.67,.33))*6.-3.)-1.,0.,1.);}
-vec4 fx(vec2 uv){
-  vec2 p=P(uv),m=MS();float t=u_time;
-  vec2 q=p*1.05+vec2(.05,.12);
-  vec3 col=mix(pal(.12),pal(.32),smoothstep(-.8,.9,p.x*.4+p.y*.5+.3))*(.85+.15*sin(p.x*9.)*.3);
-  col*=1.-.2*smoothstep(.3,1.2,length(p));
-  float cut=.36+.05*sin(q.x*14.+1.)+.03*sin(q.x*31.);
-  float d=figSide(q),k=smoothstep(.006,-.006,d)*step(q.y,cut);
-  vec3 stone=pal(0.)+pal(.2)*.25*tf(q*30.)+pal(.35)*.25*smoothstep(.02,-.02,d+.01)*smoothstep(-.1,.2,q.x-q.y*.3);
-  float drape=smoothstep(.01,-.01,length((q-vec2(.12,-.6))*vec2(.8,1.1))-.4)*smoothstep(-.02,.08,q.x+q.y*.9+.2);
-  vec3 cloth=mix(pal(.5),pal(1.),.6+.4*sin(q.x*15.+q.y*10.+sin(q.y*9.+q.x*4.)*2.2))*.92;
-  col=mix(col,stone,k);col=mix(col,cloth,drape*step(q.y,-.1));
-  float ember=smoothstep(.05,0.,abs(q.y-cut))*smoothstep(.006,-.03,figSide(q-vec2(0.,.02)))*1.;
-  col+=mix(vec3(1.,.55,.15),spec(q.x*2.+t*.2),.4)*ember*1.3;
-  vec2 fq=vec2((q.x-.0-m.x*.15)*1.6,q.y-cut);
-  float fn=tf(vec2(fq.x*3.+2.,fq.y*1.8-t*1.6)*1.8)*.7+tf(vec2(fq.x*6.,fq.y*3.5-t*2.5)*1.8)*.35;
-  float body=fn*1.45-fq.y*1.1-abs(fq.x-.12)*.95-.12;
-  float a=smoothstep(-.06,.5,body)*smoothstep(-.03,.03,fq.y);
-  float hu=fract(fn*1.2+fq.y*.7-t*.08);
-  vec3 warm=mix(vec3(1.,.42,.08),vec3(1.,.18,.62),smoothstep(.2,.8,fq.y*1.4+hu*.4));
-  vec3 fc=mix(mix(warm,spec(hu),.35),vec3(1.,.9,.7),smoothstep(.5,1.,body));
-  col=col*(1.-a*.8)+fc*a*1.15;
-  for(int i=0;i<14;i++){float fi=float(i),h=fract(sin(fi*71.3)*4375.5),y=fract(h*5.+t*(.12+h*.15));
-    vec2 sp=vec2(.05+(h-.3)*.6+y*.2,cut+y*.7);float s=exp(-length((q-sp)*vec2(1.,1.6))*90.);col+=spec(h+t*.1)*s*(1.-y);}
-  return vec4(col,1.);}`],
-
-  ghost: ['#1a0b3a,#4a2a96,#8a5cf0,#c9a8ff,#ff7a8a,#ffd7a0', false, `
-vec4 fx(vec2 uv){
-  vec2 p=P(uv),m=MS();float t=u_time;
-  vec2 q=p*1.05+vec2(-.05,.12);
-  vec3 col=mix(pal(.55),pal(.3),smoothstep(-.6,.9,length(p*vec2(.7,1.))))+pal(.85)*.12*exp(-length(p-vec2(.15,.35))*3.);
-  float sp=.08+.08*u_hover+.04*sin(t*.7);
-  float acc=0.;
-  for(int i=0;i<18;i++){float f=float(i)/17.;float off=f*f*(.5+.4*sin(q.y*40.+t*.5+f*3.)*.2);
-    vec2 s=q+vec2(off*(1.2+m.x*.5)*sp*6.,0.);acc+=smoothstep(.01,-.01,figSide(s))*(1.-f*.85);}
-  acc/=6.;
-  float core=smoothstep(.006,-.006,figSide(q+vec2(sin(t*.8)*.004,0.)));
-  col=mix(col,pal(.12),clamp(acc,0.,1.)*.75);
-  col=mix(col,pal(.04),core*.85);
-  float rim=smoothstep(.012,0.,abs(figSide(q-vec2(-.006,0.))))*step(0.,q.x+.02)*core;
-  float rimH=smoothstep(.0,.03,figSide(q))*smoothstep(.06,0.,figSide(q))*step(-.05,q.x-q.y*.2);
-  col+=mix(pal(.85),pal(1.),.5)*(rimH*.9+rim*.6)*(.85+.15*sin(t*2.));
-  float streak=pow(tn(vec2(uv.y*u_res.y*.25,floor(t*2.)))*1.,6.)*smoothstep(.0,.6,acc);
-  col+=pal(.9)*streak*.6+pal(.8)*smoothstep(.02,0.,abs(fract(uv.y*13.+t*.1)-.5)-.47)*acc*.08;
-  return vec4(col,1.);}`],
-
-  codehead: ['#000000,#141428,#2e5cff,#ff3d9a,#ffd23a,#ffffff', false, `
-vec3 spec(float x){return clamp(abs(fract(x+vec3(0.,.67,.33))*6.-3.)-1.,0.,1.);}
-vec4 fx(vec2 uv){
-  vec2 p=P(uv),m=MS();float t=u_time;
-  vec2 px=uv*u_res;float rh=7.,cw=5.;float row=floor(px.y/rh);
-  float burst=step(.8,hash(vec2(row*.13,floor(t*2.5))));
-  float near=exp(-pow((uv.y-u_mouse.y)*9.,2.))*u_hover;
-  float x=px.x+(hash(vec2(row,floor(t*3.)))-.5)*70.*burst+(hash(vec2(row,7.))-.5)*60.*near;
-  float ch=floor(x/cw);vec2 cc=vec2((ch+.5)*cw,(row+.5)*rh)/u_res;
-  vec2 q=(cc-.5)*vec2(AR(),1.)/min(AR(),1.)*1.05+vec2(.02,.1);
-  float d=figSide(q),inside=smoothstep(.04,-.02,d);
-  float trail=smoothstep(.06,-.3,figSide(q+vec2(.25+.15*sin(row*.7+t*.3),0.)))*.6*step(q.x,.1);
-  float dens=max(inside*(.55+.45*tf(q*6.+t*.05)),trail*hash(vec2(row,3.)));
-  float shoulder=smoothstep(.0,-.15,q.y+.25)*smoothstep(.0,-.2,q.x-.1)*.9;
-  dens=max(dens,shoulder*(.5+.5*hash(vec2(ch,row))));
-  vec2 f=vec2(mod(x,cw),mod(px.y,rh));
-  float gx=floor(f.x/(cw/3.)),gy=floor(f.y/((rh-2.)/4.));
-  float on=step(.42,hash(vec2(ch*3.+gx,row*5.+gy+floor(t*4.+ch*.11))))*step(f.x,cw-1.2)*step(f.y,rh-2.2);
-  float vis=step(hash(vec2(ch*1.7,row*3.1)),dens);
-  float lum=.35+.65*tf(q*4.-t*.03);
-  vec3 c=mix(vec3(.85),spec(fract(q.y*.8+q.x*.3+lum*.4-t*.03)),smoothstep(.2,.7,lum)*.85);
-  c=mix(c,vec3(1.),shoulder*.6);
-  vec3 col=c*on*vis*(.5+.6*lum);
   return vec4(col,1.);}`],
   orb: ['#04030a,#1d1452,#4f46e5,#22d3ee,#f0abfc,#ffffff', true, `
 vec4 fx(vec2 uv){
