@@ -29,6 +29,15 @@ float sn(vec3 p){return sin(p.x*1.3+sin(p.y*1.7))*sin(p.y*1.1+sin(p.z*1.9))*sin(
 float fb3(vec3 p){float v=0.,a=.5;for(int i=0;i<3;i++){v+=a*sn(p);p=p*2.03+vec3(1.7,9.2,3.1);a*=.5;}return v;}
 float tn(vec2 p){return texture2D(u_tex,(p+.5)/256.).r;}
 float tf(vec2 p){float v=0.,a=.5;mat2 m=mat2(1.6,1.2,-1.2,1.6);for(int i=0;i<5;i++){v+=a*tn(p);p=m*p;a*=.5;}return v;}
+/* figures: a head and shoulders from the front, a hooded figure, and a profile facing right */
+float sdE(vec2 p,vec2 r){return (length(p/r)-1.)*min(r.x,r.y);}
+float sdB(vec2 p,vec2 b){vec2 d=abs(p)-b;return length(max(d,0.))+min(max(d.x,d.y),0.);}
+float figFront(vec2 p){float h=sdE(p-vec2(0.,.26),vec2(.165,.215)),n=sdB(p-vec2(0.,.0),vec2(.085,.12)),s=sdE(p-vec2(0.,-.66),vec2(.6,.55));return smin(smin(h,n,.05),s,.13);}
+float figHood(vec2 p){float h=sdE(p-vec2(0.,.24),vec2(.225,.29)),s=sdE(p-vec2(0.,-.66),vec2(.62,.6));return smin(h,s,.2);}
+float figSide(vec2 p){
+  float sk=sdE(p-vec2(-.04,.3),vec2(.18,.185)),fc=sdE(p-vec2(.06,.22),vec2(.105,.16)),ns=sdE(p-vec2(.16,.23),vec2(.03,.035));
+  float ch=sdE(p-vec2(.08,.1),vec2(.07,.05)),nk=sdB((p-vec2(.0,-.02))*mat2(.96,.28,-.28,.96),vec2(.09,.13)),sh=sdE(p-vec2(-.06,-.66),vec2(.56,.52));
+  return smin(smin(smin(smin(sk,fc,.05),min(ns,ch),.03),nk,.05),sh,.1);}
 /* a studio: a soft sky, a key softbox, a fill light and a bright horizon line for chrome to catch */
 vec3 envc(vec3 rd){
   vec3 c=mix(pal(.06),pal(.45),smoothstep(-.6,.9,rd.y));
