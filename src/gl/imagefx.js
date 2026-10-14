@@ -85,6 +85,7 @@ const IFX = {
     return acc/14.;}`
 };
 const IFX_HEAD = `
+float tn(vec2 p){return hash(floor(p))*.5+hash(floor(p*.5))*.3+hash(floor(p*.25))*.2;}
 vec3 IMG(vec2 c,float which){c=clamp(c,.001,.999);return texture2D(u_tex,vec2(c.x*.5+which*.5,c.y)).rgb;}
 `;
 const IFX_TAIL = `
