@@ -52,3 +52,26 @@ const H = [
   <div class="hx-copy"><p class="hx-k">Autumn · Winter</p><h1>Seen,<br>not shown.</h1></div>
 </section>`]
 ];
+export const HERO_CSS = `.hx{position:relative;min-height:520px;overflow:hidden;color:#fff;font-family:"Bricolage Grotesque",system-ui,sans-serif;display:grid;align-content:end;justify-items:start;gap:18px;padding:56px;box-sizing:border-box}
+.hx h1{position:relative;margin:0;font-size:clamp(44px,7vw,96px);font-weight:800;letter-spacing:-.05em;line-height:.88}
+.hx p{position:relative;margin:0}
+.hx-k{font:400 12px/1 "JetBrains Mono",monospace;letter-spacing:.14em;text-transform:uppercase;opacity:.75}
+.hx-laser{background:#050100;align-content:start;padding-top:70px}
+.hx-laser h1{text-shadow:0 0 40px rgba(255,77,0,.6)}
+.hx-disc{background:#000;grid-template-columns:1fr 1fr;align-items:center;align-content:center}
+.hx-disc piix-fx{height:460px}
+.hx-flame{background:#03040a;justify-items:center;text-align:center;align-content:center}
+.hx-flame h1,.hx-ink h1{font:400 clamp(52px,8vw,120px)/.86 "Instrument Serif",serif;letter-spacing:-.03em}
+.hx-flame i,.hx-ink i{color:#ff4d2e}
+.hx-key{background:#000}
+.hx-key piix-fx{position:absolute;inset:0 0 10% 35%;width:auto;height:auto}
+.hx-key h1{font-weight:300}
+.hx-pod{background:#050506;align-content:start;justify-items:center;text-align:center}
+.hx-pod h1{font-weight:200;letter-spacing:.24em;padding-left:.24em}
+.hx-orb{background:radial-gradient(ellipse at 50% 30%,#1d1452,#04030a 65%);justify-items:center;text-align:center;align-content:center;gap:10px}
+.hx-orb piix-fx{height:300px;width:100%}
+.hx-orb piix-input{width:min(460px,100%)}
+.hx-por{background:#e4e2df;color:#111;grid-template-columns:1fr 1fr;align-items:center;align-content:center;padding:0}
+.hx-por piix-image-fx{height:520px}
+.hx-por .hx-copy{padding:40px}
+@media (max-width:760px){.hx-disc,.hx-por{grid-template-columns:1fr}}`;
