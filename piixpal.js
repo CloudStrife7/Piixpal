@@ -12576,13 +12576,29 @@ ELEMENTS.hero = 'piix-hero';
  *
  *   src, src2 the image, and a second one for morph
  *   alt       what it shows
- *   effect    alive | liquid | rgb | morph | ripple | streak | zoom | frosted | code   default: liquid
+ *   effect    dots | alive | liquid | rgb | morph | ripple | streak | zoom | frosted | code   default: liquid
+ *             dots: one-colour dot art that shimmers cell by cell, scans, scatters from the pointer and sheds sparks
  *             alive keeps the picture as it is and brings it to life: depth parallax, breathing glow,
  *             heat haze over the hot parts, bloom, a slow light sweep and grain
  *   auto      morph back and forth on its own instead of on hover
  *   palette   the glow colours (morph edge, streak light)      default: sunset
  *   height    any CSS length (default: the image's own shape)  */
 const IFX = {
+  dots: `float LU(vec2 c){return dot(IMG(c,0.),vec3(.3,.59,.11));}
+    vec3 shade(vec2 c){float t=u_time,cs=3.;
+    vec2 px=c*u_res,cell=floor(px/cs);float h=hash(cell);
+    vec2 d=(c-u_mouse)*vec2(u_res.x/u_res.y,1.);float near=exp(-dot(d,d)*22.)*u_hover;
+    vec2 sc=c+normalize(d+.0001)*near*.06*(.4+.6*h)*vec2(u_res.y/u_res.x,1.);
+    sc+=vec2(sin(t*.6+h*30.),cos(t*.5+h*20.))*.0012;
+    vec3 src=IMG(sc,0.);float lum=dot(src,vec3(.3,.59,.11));
+    float fl=.55+.75*hash(cell+floor(t*7.+h*7.));
+    float scan=exp(-pow((fract(t*.11)*1.5-.25-(1.-c.y))*9.,2.));
+    float edge=smoothstep(.04,.18,lum)*smoothstep(.45,.15,lum);
+    float rise=fract(h*7.+t*.09);
+    float spark=step(.992,hash(cell*.71+floor(t*3.)))*LU(c-vec2(0.,rise*.05))*3.;
+    float b=lum*fl*(1.+scan*1.4)+edge*spark+near*lum*.6;
+    vec3 tint=mix(pal(.62),pal(.8),smoothstep(.05,.5,b))+pal(1.)*smoothstep(.9,1.3,b)*.08;
+    return tint*clamp(b*1.2,0.,1.2);}`,
   alive: `float L(vec2 c){return dot(IMG(c,0.),vec3(.3,.59,.11));}
     float soft(vec2 c){float s=0.;for(int i=0;i<8;i++){float a=float(i)*.785;s+=L(c+vec2(cos(a),sin(a))*.03);}return s/8.;}
     vec3 shade(vec2 c){float t=u_time;
