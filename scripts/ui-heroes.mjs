@@ -1,5 +1,10 @@
 // Pixel UI docs: ready-made 3D hero sections. Each one is a <piix-fx> plus a small layout you copy.
 const H = [
+  ["hero-visor","Visor hero","visor","A silhouette behind hammered glass with a glowing orange visor.","<section class=\"hx hx-visor\">\n  <piix-fx kind=\"visor\" fill></piix-fx>\n  <p class=\"hx-k\">Collection 04 · Anonymous</p>\n  <h1>Seen through<br>the glass.</h1>\n</section>"],
+  ["hero-hood","Hooded figure hero","hood","An orange poster: a hooded figure behind glass, with a clear window that follows the pointer.","<section class=\"hx hx-hood\">\n  <piix-fx kind=\"hood\" fill></piix-fx>\n  <p class=\"hx-k\">Made by you</p>\n  <h1>Look closer.</h1>\n</section>"],
+  ["hero-bust","Burning bust hero","bust","A carved bust in profile with iridescent flames rising from its head.","<section class=\"hx hx-bust\">\n  <piix-fx kind=\"bust\" fill></piix-fx>\n  <h1>Ideas that<br><i>catch fire.</i></h1>\n  <p class=\"hx-k\">Conference · 2026</p>\n</section>"],
+  ["hero-ghost","Motion blur hero","ghost","A profile in violet haze, trailing light as it moves.","<section class=\"hx hx-ghost\">\n  <piix-fx kind=\"ghost\" fill></piix-fx>\n  <p class=\"hx-k\">New single</p>\n  <h1>Afterimage</h1>\n</section>"],
+  ["hero-codehead","Code portrait hero","codehead","A profile built from rows of glitching colour glyphs.","<section class=\"hx hx-code\">\n  <piix-fx kind=\"codehead\" fill></piix-fx>\n  <h1>ONE FLAIR<br>DESIGN.</h1>\n</section>"],
   ['hero-laser', 'Laser hero', 'beam', 'Lasers strike a rocky peak; the headline sits in the haze above.',
 `<section class="hx hx-laser">
   <piix-fx kind="beam" fill></piix-fx>
