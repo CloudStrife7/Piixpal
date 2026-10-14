@@ -6,16 +6,61 @@
  * Smooth, full-resolution GPU image effects, the kind you see on award-winning sites: the image
  * turns to liquid and bulges toward the pointer, splits into red and blue when you move fast,
  * ripples like water, smears into long streaks of light, zooms in a blur, or melts from one
- * picture into a second one through a glowing edge. It crops like object-fit: cover.
+ * picture into a second one through a glowing edge, hides behind hammered glass with a clear window
+ * that follows the pointer, or breaks into rows of glitching glyphs. It crops like object-fit: cover.
  * Images must be on your site or served with CORS.
  *
  *   src, src2 the image, and a second one for morph
  *   alt       what it shows
- *   effect    liquid | rgb | morph | ripple | streak | zoom      default: liquid
+ *   effect    alive | liquid | rgb | morph | ripple | streak | zoom | frosted | code   default: liquid
+ *             alive keeps the picture as it is and brings it to life: depth parallax, breathing glow,
+ *             heat haze over the hot parts, bloom, a slow light sweep and grain
  *   auto      morph back and forth on its own instead of on hover
  *   palette   the glow colours (morph edge, streak light)      default: sunset
  *   height    any CSS length (default: the image's own shape)  */
 const IFX = {
+  alive: `float L(vec2 c){return dot(IMG(c,0.),vec3(.3,.59,.11));}
+    float soft(vec2 c){float s=0.;for(int i=0;i<8;i++){float a=float(i)*.785;s+=L(c+vec2(cos(a),sin(a))*.03);}return s/8.;}
+    vec3 shade(vec2 c){float t=u_time;
+    float d=soft(c);
+    vec2 m=(u_mouse-.5)*u_hover+vec2(sin(t*.23),cos(t*.19))*.35;
+    vec2 cp=.5+(c-.5)*(.97+.012*sin(t*.31))+vec2(sin(t*.17),cos(t*.13))*.006;
+    cp-=m*(d-.25)*.05;
+    float hot=smoothstep(.45,.95,soft(cp-vec2(0.,.04)));
+    cp+=vec2(sin(cp.y*60.-t*5.)+sin(cp.y*23.+cp.x*9.-t*3.),0.)*.0016*hot;
+    cp.y+=sin(cp.x*40.+t*2.)*.0008*hot;
+    vec3 col=IMG(cp,0.);
+    float lum=dot(col,vec3(.3,.59,.11)),glow=smoothstep(.55,1.,lum);
+    float flick=.85+.15*sin(t*7.+cp.y*30.)*sin(t*3.3+cp.x*17.)+.1*sin(t*1.3);
+    col+=col*glow*(flick-.85)*1.8;
+    vec3 bloom=vec3(0.);for(int i=0;i<10;i++){float a=float(i)*.628;vec3 s=IMG(cp+vec2(cos(a),sin(a))*.02,0.);bloom+=max(s-.6,0.);}
+    col+=bloom/10.*mix(vec3(1.),pal(.8),.5)*(.9+.4*sin(t*2.1));
+    float sw=smoothstep(.12,0.,abs(fract(t*.05)*2.4-.7-(c.x+c.y*.4)));
+    col+=pal(1.)*sw*.06*(.5+d);
+    col*=1.-.3*smoothstep(.45,.95,length((c-.5)*vec2(1.2,1.)));
+    col+=(hash(c*u_res+fract(t*7.)*91.)-.5)*.06;
+    return col;}`,
+  frosted: `float bump(vec2 c){return tn(c*u_res*.35)*.6+tn(c*u_res*.8+7.)*.4;}
+    vec3 shade(vec2 c){float ar=u_res.x/u_res.y;vec2 e=vec2(1.5,0.)/u_res;float b0=bump(c);
+    vec2 g=vec2(bump(c+e.xy)-b0,bump(c+e.yx)-b0);vec2 cc=c+g*.06;
+    vec3 col=vec3(0.);
+    for(int i=0;i<12;i++){float a=float(i)*.5236,rr=.006+.012*fract(float(i)*.37);col+=IMG(cc+vec2(cos(a),sin(a))*rr,0.);}
+    col=col/12.;col=mix(col,vec3(dot(col,vec3(.33))),.15)*(.9+.25*(b0-.5))+vec3(.06)*smoothstep(.55,.9,b0);
+    vec2 d=(c-u_mouse)*vec2(ar,1.);float sq=max(abs(d.x),abs(d.y)),w=.2*smoothstep(0.,.6,u_hover);
+    if(w>.01&&sq<w)return IMG(c,0.);
+    return col+vec3(.9)*step(w,sq)*step(sq,w+.0025)*step(.01,w);}`,
+  code: `vec3 spec(float x){return clamp(abs(fract(x+vec3(0.,.67,.33))*6.-3.)-1.,0.,1.);}
+    vec3 shade(vec2 c){vec2 px=c*u_res;float rh=8.,cw=6.;float row=floor(px.y/rh);
+    float burst=step(.82,hash(vec2(row*.13,floor(u_time*2.5))));
+    float near=exp(-pow((c.y-u_mouse.y)*9.,2.))*u_hover;
+    float x=px.x+(hash(vec2(row,floor(u_time*3.)))-.5)*120.*burst+(hash(vec2(row,7.))-.5)*90.*near;
+    float ch=floor(x/cw);vec2 f=vec2(mod(x,cw),mod(px.y,rh));
+    vec3 im=IMG(vec2((ch+.5)*cw,(row+.5)*rh)/u_res,0.);float lum=dot(im,vec3(.3,.59,.11));
+    float gx=floor(f.x/(cw/3.)),gy=floor(f.y/((rh-2.)/4.));
+    float on=step(.45,hash(vec2(ch*3.+gx,row*5.+gy+floor(u_time*5.+ch*.13))))*step(f.x,cw-1.5)*step(f.y,rh-2.5);
+    float vis=step(.12,lum)*step(hash(vec2(ch,row*3.1)),lum*1.6);
+    vec3 col=mix(im*1.5,spec(fract(lum*.8+row*.006-u_time*.04)),.35);
+    return col*on*vis;}`,
   liquid: `vec3 shade(vec2 c){vec2 m=u_mouse,d=c-m;float t=u_time;
     c+=.02*(.5+u_hover)*vec2(sin(c.y*11.+t*1.2),cos(c.x*9.-t*1.1));
     c-=d*exp(-dot(d,d)*28.)*.22*u_hover;
