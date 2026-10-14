@@ -74,7 +74,13 @@ export const HERO_CSS = `.hx{position:relative;min-height:520px;overflow:hidden;
 .hx-por{background:#e4e2df;color:#111;grid-template-columns:1fr 1fr;align-items:center;align-content:center;padding:0}
 .hx-por piix-image-fx{height:520px}
 .hx-por .hx-copy{padding:40px}
-@media (max-width:760px){.hx-disc,.hx-por{grid-template-columns:1fr}}`;
+.hx-dots{background:#000;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:center;align-content:center;padding:0;color:#c6f432}
+.hx-dots piix-image-fx{height:560px;aspect-ratio:auto!important;min-width:0}
+.hx-dots .hx-copy{padding:40px;min-width:0}
+.hx-dots h1{font-size:clamp(34px,4.6vw,76px)}
+.hx-mono{color:#f3eee3}
+.hx-mono piix-image-fx{height:600px}
+@media (max-width:760px){.hx-disc,.hx-por,.hx-dots{grid-template-columns:1fr}}`;
 const page = ([slug, name, fx, brief, demo]) => ({
   slug, name, section: 'Hero sections', tag: fx === 'image' ? 'piix-image-fx' : 'piix-fx', file: fx === 'image' ? 'image-fx' : 'fx', brief,
   about: 'A complete hero section: a moving 3D layer and a layout around it. Copy the markup and the CSS, swap the words, and it is yours. Every hero answers the pointer.',
