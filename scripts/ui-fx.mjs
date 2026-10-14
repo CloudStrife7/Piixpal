@@ -53,9 +53,9 @@ const fxPage = ([kind, name, brief, floats, about]) => ({
     { name: 'In your colours', demo: `<div class="ex-row">\n  <piix-fx kind="${kind}" palette="sunset" height="200px"></piix-fx>\n  <piix-fx kind="${kind}" palette="ocean" height="200px"></piix-fx>\n  <piix-fx kind="${kind}" palette="#050505,#1f1f24,#5a5a66,#bdbdc7,#ffffff" height="200px"></piix-fx>\n</div>`, stage: { pad: 0 } }
   ],
   props: [
-    ['kind', ['blob', 'glass', 'podium', 'ink', 'aura', 'reeded', 'orb', 'silk', 'morph', 'terrain', 'tunnel', 'waves', 'clouds', 'caustics', 'gradient', 'swarm'].map(k => `<code>${k}</code>`).join(' '), 'blob'],
+    ['kind', ['beam', 'disc', 'flame', 'blob', 'glass', 'podium', 'ink', 'aura', 'reeded', 'orb', 'silk', 'morph', 'terrain', 'tunnel', 'waves', 'clouds', 'caustics', 'gradient', 'swarm'].map(k => `<code>${k}</code>`).join(' '), 'blob'],
     ['palette', 'tint it: a palette name or your own colours, dark to light', "the kind's own"],
-    ['bg', '<code>none</code>: just the object (blob, glass, orb, morph, swarm)', ''],
+    ['bg', '<code>none</code>: just the object (blob, glass, disc, orb, morph, swarm)', ''],
     ['quality', '1 is full resolution; lower is faster', '.75'],
     ['grain', 'film grain, 0 to 1', '.35'],
     ['speed', '1 is normal, 0 holds still', '1'],
