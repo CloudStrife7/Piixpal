@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monolith · a Pixel UI showcase</title>
+<link rel="icon" href="../../site/favicon.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  /* Monolith: a speaker cut from one stone. Grey, heavy, lit from above. */
+  * { box-sizing: border-box }
+  body { margin: 0; background: #050506; color: #e9e9ec; font: 300 17px/1.6 "Bricolage Grotesque", system-ui, sans-serif }
+  .mono { font: 400 12px/1.4 "JetBrains Mono", monospace; letter-spacing: .14em; text-transform: uppercase; color: #8a8a92 }
+  nav { position: absolute; z-index: 5; inset: 0 0 auto; display: flex; justify-content: space-between; padding: 28px 48px }
+  .hero { position: relative; height: 100vh; min-height: 680px; overflow: hidden }
+  .title { position: absolute; left: 0; right: 0; top: 14vh; text-align: center; font-weight: 200; font-size: clamp(56px, 12vw, 210px); letter-spacing: .24em; line-height: 1; margin: 0; padding-left: .24em; color: #f4f4f6; mix-blend-mode: screen; opacity: .92 }
+  .hero .foot { position: absolute; left: 48px; right: 48px; bottom: 38px; display: flex; justify-content: space-between; align-items: end }
+  .hero .foot p { margin: 0; max-width: 34ch; color: #a3a3ab }
+  section { padding: 130px 48px }
+  .specs { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid #222226 }
+  .specs div { padding: 26px 0; border-right: 1px solid #222226; padding-left: 24px }
+  .specs div:first-child { padding-left: 0 }
+  .specs b { display: block; font-weight: 300; font-size: 54px; letter-spacing: -.04em; color: #fff }
+  @media (max-width: 900px) { .specs { grid-template-columns: 1fr 1fr } }
+  .quote { text-align: center; font: italic 400 clamp(36px, 5vw, 74px)/1.05 "Instrument Serif", serif; letter-spacing: -.01em; max-width: 18ch; margin: 0 auto }
+  .gal { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px }
+  @media (max-width: 900px) { .gal { grid-template-columns: 1fr } }
+  .band { position: relative; height: 70vh; display: grid; place-content: center; text-align: center; overflow: hidden }
+  .band h2 { position: relative; margin: 0 0 24px; font-weight: 200; font-size: clamp(44px, 7vw, 120px); letter-spacing: -.04em; line-height: .95 }
+  .band .cta { position: relative; display: flex; gap: 18px; justify-content: center }
+  footer { padding: 30px 48px 44px; display: flex; justify-content: space-between }
+</style>
+</head>
+<body>
+<nav><span class="mono">Monolith</span><span class="mono">Sound · Stone · Silence</span><span class="mono">Order</span></nav>
+
+<header class="hero">
+  <piix-fx kind="podium" fill quality=".8" aria-label="A slab of dark stone floating in a single beam of light"></piix-fx>
+  <h1 class="title">MONOLITH</h1>
+  <div class="foot"><p>A speaker carved from a single block of basalt. Nothing rattles. Nothing hums. Just sound, and the weight of it.</p><span class="mono">Edition of 300 · €4,800</span></div>
+</header>
+
+<section>
+  <div class="specs">
+    <div><b>38 kg</b><span class="mono">Solid basalt</span></div>
+    <div><b>22 Hz</b><span class="mono">Lowest note</span></div>
+    <div><b>0</b><span class="mono">Screws you can see</span></div>
+    <div><b>300</b><span class="mono">Ever made</span></div>
+  </div>
+</section>
+
+<section style="padding-top:0"><p class="quote">“It doesn't sound like a speaker. It sounds like the room got quieter, and then the music arrived.”</p></section>
+
+<section style="padding-top:0">
+  <div class="gal">
+    <piix-image-fx src="../../site/pixelui-30-poster.jpg" effect="streak" height="520px" alt="Late light across the listening room"></piix-image-fx>
+    <div style="display:grid;gap:14px">
+      <piix-image-fx src="../../site/pixelui-launch-poster.jpg" effect="zoom" height="253px" alt="The quarry at dawn"></piix-image-fx>
+      <piix-fx kind="silk" height="253px" palette="#050506,#1a1a1d,#3c3c42,#8a8a92,#d9d9de,#ffffff" aria-label="Grey felt, folding"></piix-fx>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <piix-fx kind="aura" fill palette="#050506,#1d1d22,#4a4a52,#a8a8b0,#f0f0f2"></piix-fx>
+  <h2>Heavy music<br>deserves a heavy speaker.</h2>
+  <div class="cta"><piix-glow-button look="chrome" size="lg">Reserve one</piix-glow-button></div>
+</section>
+
+<footer><span class="mono">Monolith is a made-up brand for a Pixel UI showcase</span><span class="mono">piixpal.dvkk.dev/ui</span></footer>
+<script src="../../piixpal.js"></script>
+</body>
+</html>
