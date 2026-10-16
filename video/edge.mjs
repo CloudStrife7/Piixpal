@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, extname, resolve } from 'node:path';
 
@@ -21,8 +21,12 @@ export const serve = port => new Promise(ok => {
   s.listen(port, '127.0.0.1', () => ok(s));
 });
 
+/* browser profiles live under .git/tmp (not the system temp folder) and are deleted on close */
+const PROFILES = join(ROOT, '.git', 'tmp', 'edge-profiles');
 export async function browser({ port = 9341, width = 1920, height = 1080 } = {}) {
-  const edge = spawn(EDGE, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${mkdtempSync(join(tmpdir(), 'piixvid-'))}`,
+  mkdirSync(PROFILES, { recursive: true });
+  const profile = mkdtempSync(join(PROFILES, 'p-'));
+  const edge = spawn(EDGE, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`,
     '--no-first-run', '--hide-scrollbars', '--force-device-scale-factor=1', 'about:blank'], { stdio: 'ignore' });
   let t;
   for (let i = 0; i < 60; i++) { try { t = await (await fetch(`http://127.0.0.1:${port}/json`)).json(); if (t.length) break; } catch {} await sleep(250); }
@@ -39,6 +43,6 @@ export async function browser({ port = 9341, width = 1920, height = 1080 } = {})
     return r.result.result.value;
   };
   const shot = async (format = 'png') => Buffer.from((await send('Page.captureScreenshot', { format, quality: format === 'jpeg' ? 95 : undefined })).result.data, 'base64');
-  const close = () => { ws.close(); edge.kill(); };
+  const close = () => { ws.close(); edge.kill(); setTimeout(() => { try { rmSync(profile, { recursive: true, force: true }); } catch {} }, 800); };
   return { send, evaluate, shot, close };
 }
