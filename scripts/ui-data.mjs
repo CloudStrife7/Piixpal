@@ -363,3 +363,8 @@ import { HERO_PAGES, HERO_CSS, IMAGE_HERO_PAGES, DOT_HERO_PAGES } from './ui-her
 UI.push(...HERO_PAGES, ...IMAGE_HERO_PAGES, ...DOT_HERO_PAGES);
 SECTIONS.splice(SECTIONS.indexOf('3D & Shaders'), 0, 'Hero sections');
 export { HERO_CSS };
+
+/* ---------- games and sound ---------- */
+import { GAME_PAGES } from './ui-games.mjs';
+UI.push(...GAME_PAGES);
+SECTIONS.splice(SECTIONS.indexOf('Motion') + 1, 0, 'Games & sound');
