@@ -1277,6 +1277,84 @@ const kitPal = (cv, name, clip, i, s) => {
 };
 const kitClip = (name, want) => { const sp = SPRITES[name], c = sp ? Object.keys(sp.frames) : []; return want.find(w => c.includes(w)) || c[0]; };
 
+/* ---- elements/sfx.js ---- */
+/* SFX: tiny 8-bit sounds, made on the spot with WebAudio. No audio files, nothing to load.
+ *
+ * Components call sfx('coin', this). It only makes a sound when the page asked for sound:
+ * the component has a sound attribute, or a <piix-chiptune> lives on the page. A muted
+ * speaker (remembered in localStorage) always wins. Browsers start audio on the first click
+ * or key press, so a hover before that stays silent. */
+const SFX = { ctx: null, out: null, noise: null, vol: .25, on: 0, last: {} };
+const sfxMuted = () => { try { return localStorage.getItem('piix-sfx') === 'off'; } catch (_) { return false; } };
+const sfxCtx = () => {
+  if (!SFX.ctx) {
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return null;
+    const c = SFX.ctx = new C();
+    SFX.out = c.createGain(); SFX.out.gain.value = SFX.vol; SFX.out.connect(c.destination);
+    /* one second of white noise, reused by every hiss, crunch and snare */
+    const b = SFX.noise = c.createBuffer(1, c.sampleRate, c.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  if (SFX.ctx.state === 'suspended') SFX.ctx.resume();
+  return SFX.ctx;
+};
+/* one note: a wave sliding from f0 to f1 Hz, with a quick attack and a clean tail */
+const sfxTone = (c, at, wave, f0, f1, dur, vol = 1) => {
+  const o = c.createOscillator(), g = c.createGain(), t = c.currentTime + at;
+  o.type = wave; o.frequency.setValueAtTime(f0, t);
+  if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.3 * vol, t + .004);
+  g.gain.setValueAtTime(.3 * vol, t + dur * .7); g.gain.linearRampToValueAtTime(0, t + dur);
+  o.connect(g); g.connect(SFX.out); o.start(t); o.stop(t + dur + .02);
+};
+/* a burst of noise through a low-pass that closes: crunches, thuds and hisses */
+const sfxNoise = (c, at, dur, vol = 1, hz = 3000) => {
+  const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime + at;
+  s.buffer = SFX.noise; f.type = 'lowpass'; f.frequency.setValueAtTime(hz, t); f.frequency.exponentialRampToValueAtTime(200, t + dur);
+  g.gain.setValueAtTime(.35 * vol, t); g.gain.linearRampToValueAtTime(0, t + dur);
+  s.connect(f); f.connect(g); g.connect(SFX.out); s.start(t, Math.random() * .5); s.stop(t + dur + .02);
+};
+/* a run of notes, one after another */
+const sfxRun = (c, wave, notes, step, vol, hold = step) => notes.forEach((f, i) => sfxTone(c, i * step, wave, f, f, i === notes.length - 1 ? hold : step * .9, vol));
+const SFX_BANK = {
+  hover: (c, p) => sfxTone(c, 0, 'square', 1320 * p, 1320 * p, .025, .35),
+  click: (c, p) => sfxTone(c, 0, 'square', 660 * p, 440 * p, .045, .7),
+  blip: (c, p) => sfxTone(c, 0, 'square', 880 * p, 880 * p, .05, .6),
+  select: (c, p) => sfxRun(c, 'square', [523 * p, 784 * p], .045, .55),
+  type: (c, p) => sfxTone(c, 0, 'square', p * (560 + Math.random() * 60), p * 520, .03, .4),
+  coin: (c, p) => sfxRun(c, 'square', [988 * p, 1319 * p], .07, .6, .28),
+  jump: (c, p) => sfxTone(c, 0, 'square', 220 * p, 660 * p, .16, .6),
+  bounce: (c, p) => sfxTone(c, 0, 'triangle', 330 * p, 190 * p, .07, 1),
+  launch: (c, p) => sfxTone(c, 0, 'square', 330 * p, 990 * p, .11, .55),
+  hit: (c, p) => { sfxNoise(c, 0, .09, .8, 1800); sfxTone(c, 0, 'square', 150 * p, 60 * p, .09, .6); },
+  break: (c, p) => { sfxNoise(c, 0, .11, .9, 4200); sfxTone(c, 0, 'square', 520 * p, 160 * p, .08, .45); },
+  powerup: (c, p) => sfxRun(c, 'square', [523, 659, 784, 1047, 1319].map(f => f * p), .05, .5, .16),
+  success: (c, p) => { sfxRun(c, 'square', [523, 659, 784].map(f => f * p), .07, .45); sfxTone(c, .21, 'triangle', 1047 * p, 1047 * p, .3, 1); },
+  error: (c, p) => { sfxTone(c, 0, 'square', 196 * p, 196 * p, .1, .6); sfxTone(c, .12, 'square', 147 * p, 147 * p, .22, .6); },
+  open: (c, p) => sfxTone(c, 0, 'triangle', 392 * p, 784 * p, .12, 1),
+  close: (c, p) => sfxTone(c, 0, 'triangle', 784 * p, 392 * p, .12, 1),
+  lose: (c, p) => sfxRun(c, 'square', [494, 466, 440, 392].map(f => f * p), .14, .5, .5),
+  win: (c, p) => sfxRun(c, 'square', [523, 659, 784, 1047, 784, 1047].map(f => f * p), .08, .5, .4),
+  boot: (c, p) => { sfxTone(c, 0, 'square', 1047 * p, 1047 * p, .07, .5); sfxTone(c, .08, 'square', 2093 * p, 2093 * p, .55, .45); sfxTone(c, .08, 'triangle', 1047 * p, 1047 * p, .55, .6); }
+};
+/* is this element allowed to make a sound? */
+const sfxAllowed = el => {
+  if (sfxMuted()) return false;
+  const a = el && el.getAttribute && el.getAttribute('sound');
+  if (a === 'off') return false;
+  return a !== null && a !== undefined ? true : SFX.on > 0;
+};
+/* play a sound by name. opts.pitch shifts it (1 = as written); opts.force skips the page switch */
+const sfx = (name, el, opts = {}) => {
+  if (!SFX_BANK[name] || (opts.force ? sfxMuted() : !sfxAllowed(el))) return;
+  const t = now();
+  if (t - (SFX.last[name] || 0) < (opts.gap == null ? 30 : opts.gap)) return;
+  SFX.last[name] = t;
+  const c = sfxCtx();
+  if (c) SFX_BANK[name](c, opts.pitch || 1);
+};
+
 /* ---- elements/sprite.js ---- */
 /* <piix-sprite name="mochi" size="96"></piix-sprite>
  * Self-contained characters you can paste anywhere: they sit inline like an image.
@@ -2299,10 +2377,10 @@ Object.assign(Piixpal, {
   clear: () => document.querySelectorAll(['piix-pal', 'piix-sprite', ...Object.values(ELEMENTS)].join()).forEach(e => e.remove())
 });
 
-Piixpal._k = { reduceMQ, reduced, clamp, rnd, chance, pick, lerp, now, hexRGBA, ptr, ptrDist, scroll, subs, raf, frame, sub, unsub, rectOf, docW, boxOf, pin, areaOf, onScreen, surfaceAt, LAYER_CSS, layer, origin, getLayer, layerOrigin, SPRITES, bake, defineSprite, baked, ACTORS, shout, Actor, recruit, BEHAVIORS, defineBehavior, Piixpal, art, lastT, layerRoot, ICON_PAL, ICONS, DIGITS, numberIcon, iconCache, iconPal, bakeIcon, UI_INK, UI_PAPER, UI_FONT, UI_MONO, UI_CSS, uiHost, uiRoot, uiStyles, uiStyle, uiEl, uiIcon, uiCard, uiPlace, uiAt, uiClose, uiAnnounce, uiShadow, uiLive, measureCtx, glyphTop, textProfile, segAt, LAND, platCache, TEXTY, surfaceOf, platforms, drag, BLIP, CROWD_COLORS, PiixCrowdElement, GL, GL_PALETTES, glPalette, GL_VERT, GL_PRELUDE, GL_MAIN, glInit, glProgram, glReady, glDraw, GLStage, GL_FRAME, GL_LOOK_HEAD, GL_LOOKS, glLook, GL_LOOK_TEXT, glLookHost, glRGB, KIT_U, kitCorners, KIT_TONES, kitTone, KIT_FONT, kitCss, kitPal, kitClip, FIGURES, defineFigure, mixHex, figurePalette, bakeFigure, HEAD, PiixSpriteElement, RENDERS, lum, BAYER, ASCII, TEXTURES, BIG, PiixTypeElement, CELL_SHAPES, VOX_LOOKS, VOX_DIRS, voxKey, voxNorm, voxArt, voxModel, VOX_MODELS, voxFromArt, voxCells, voxDraw, VOX_BUF, voxBuf, VOX_BAYER, VOX_RAMP, voxPaint, VoxStage, PiixPalElement, define, ELEMENTS, add, autoAttach, SCRIPT, start };
+Piixpal._k = { reduceMQ, reduced, clamp, rnd, chance, pick, lerp, now, hexRGBA, ptr, ptrDist, scroll, subs, raf, frame, sub, unsub, rectOf, docW, boxOf, pin, areaOf, onScreen, surfaceAt, LAYER_CSS, layer, origin, getLayer, layerOrigin, SPRITES, bake, defineSprite, baked, ACTORS, shout, Actor, recruit, BEHAVIORS, defineBehavior, Piixpal, art, lastT, layerRoot, ICON_PAL, ICONS, DIGITS, numberIcon, iconCache, iconPal, bakeIcon, UI_INK, UI_PAPER, UI_FONT, UI_MONO, UI_CSS, uiHost, uiRoot, uiStyles, uiStyle, uiEl, uiIcon, uiCard, uiPlace, uiAt, uiClose, uiAnnounce, uiShadow, uiLive, measureCtx, glyphTop, textProfile, segAt, LAND, platCache, TEXTY, surfaceOf, platforms, drag, BLIP, CROWD_COLORS, PiixCrowdElement, GL, GL_PALETTES, glPalette, GL_VERT, GL_PRELUDE, GL_MAIN, glInit, glProgram, glReady, glDraw, GLStage, GL_FRAME, GL_LOOK_HEAD, GL_LOOKS, glLook, GL_LOOK_TEXT, glLookHost, glRGB, KIT_U, kitCorners, KIT_TONES, kitTone, KIT_FONT, kitCss, kitPal, kitClip, SFX, sfxMuted, sfxCtx, sfxTone, sfxNoise, sfxRun, SFX_BANK, sfxAllowed, sfx, FIGURES, defineFigure, mixHex, figurePalette, bakeFigure, HEAD, PiixSpriteElement, RENDERS, lum, BAYER, ASCII, TEXTURES, BIG, PiixTypeElement, CELL_SHAPES, VOX_LOOKS, VOX_DIRS, voxKey, voxNorm, voxArt, voxModel, VOX_MODELS, voxFromArt, voxCells, voxDraw, VOX_BUF, voxBuf, VOX_BAYER, VOX_RAMP, voxPaint, VoxStage, PiixPalElement, define, ELEMENTS, add, autoAttach, SCRIPT, start };
 return Piixpal._k;
 })();
-const { reduceMQ, reduced, clamp, rnd, chance, pick, lerp, now, hexRGBA, ptr, ptrDist, scroll, subs, raf, frame, sub, unsub, rectOf, docW, boxOf, pin, areaOf, onScreen, surfaceAt, LAYER_CSS, layer, origin, getLayer, layerOrigin, SPRITES, bake, defineSprite, baked, ACTORS, shout, Actor, recruit, BEHAVIORS, defineBehavior, Piixpal, art, lastT, layerRoot, ICON_PAL, ICONS, DIGITS, numberIcon, iconCache, iconPal, bakeIcon, UI_INK, UI_PAPER, UI_FONT, UI_MONO, UI_CSS, uiHost, uiRoot, uiStyles, uiStyle, uiEl, uiIcon, uiCard, uiPlace, uiAt, uiClose, uiAnnounce, uiShadow, uiLive, measureCtx, glyphTop, textProfile, segAt, LAND, platCache, TEXTY, surfaceOf, platforms, drag, BLIP, CROWD_COLORS, PiixCrowdElement, GL, GL_PALETTES, glPalette, GL_VERT, GL_PRELUDE, GL_MAIN, glInit, glProgram, glReady, glDraw, GLStage, GL_FRAME, GL_LOOK_HEAD, GL_LOOKS, glLook, GL_LOOK_TEXT, glLookHost, glRGB, KIT_U, kitCorners, KIT_TONES, kitTone, KIT_FONT, kitCss, kitPal, kitClip, FIGURES, defineFigure, mixHex, figurePalette, bakeFigure, HEAD, PiixSpriteElement, RENDERS, lum, BAYER, ASCII, TEXTURES, BIG, PiixTypeElement, CELL_SHAPES, VOX_LOOKS, VOX_DIRS, voxKey, voxNorm, voxArt, voxModel, VOX_MODELS, voxFromArt, voxCells, voxDraw, VOX_BUF, voxBuf, VOX_BAYER, VOX_RAMP, voxPaint, VoxStage, PiixPalElement, define, ELEMENTS, add, autoAttach, SCRIPT, start } = K;
+const { reduceMQ, reduced, clamp, rnd, chance, pick, lerp, now, hexRGBA, ptr, ptrDist, scroll, subs, raf, frame, sub, unsub, rectOf, docW, boxOf, pin, areaOf, onScreen, surfaceAt, LAYER_CSS, layer, origin, getLayer, layerOrigin, SPRITES, bake, defineSprite, baked, ACTORS, shout, Actor, recruit, BEHAVIORS, defineBehavior, Piixpal, art, lastT, layerRoot, ICON_PAL, ICONS, DIGITS, numberIcon, iconCache, iconPal, bakeIcon, UI_INK, UI_PAPER, UI_FONT, UI_MONO, UI_CSS, uiHost, uiRoot, uiStyles, uiStyle, uiEl, uiIcon, uiCard, uiPlace, uiAt, uiClose, uiAnnounce, uiShadow, uiLive, measureCtx, glyphTop, textProfile, segAt, LAND, platCache, TEXTY, surfaceOf, platforms, drag, BLIP, CROWD_COLORS, PiixCrowdElement, GL, GL_PALETTES, glPalette, GL_VERT, GL_PRELUDE, GL_MAIN, glInit, glProgram, glReady, glDraw, GLStage, GL_FRAME, GL_LOOK_HEAD, GL_LOOKS, glLook, GL_LOOK_TEXT, glLookHost, glRGB, KIT_U, kitCorners, KIT_TONES, kitTone, KIT_FONT, kitCss, kitPal, kitClip, SFX, sfxMuted, sfxCtx, sfxTone, sfxNoise, sfxRun, SFX_BANK, sfxAllowed, sfx, FIGURES, defineFigure, mixHex, figurePalette, bakeFigure, HEAD, PiixSpriteElement, RENDERS, lum, BAYER, ASCII, TEXTURES, BIG, PiixTypeElement, CELL_SHAPES, VOX_LOOKS, VOX_DIRS, voxKey, voxNorm, voxArt, voxModel, VOX_MODELS, voxFromArt, voxCells, voxDraw, VOX_BUF, voxBuf, VOX_BAYER, VOX_RAMP, voxPaint, VoxStage, PiixPalElement, define, ELEMENTS, add, autoAttach, SCRIPT, start } = K;
 
 /* ---- behaviors/beeline.js ---- */
 /* beeline: a little line of worker bees buzzing round their element. Come close and
@@ -11586,6 +11664,337 @@ canvas{position:absolute;bottom:${KIT_U + 2}px;left:0;image-rendering:pixelated;
 define('piix-toggle', PiixToggleElement);
 ELEMENTS.toggle = 'piix-toggle';
 
+/* ---- gl/breakout.js ---- */
+/* BREAKOUT: your words are the bricks.   @component breakout
+ *
+ *   <piix-breakout pal="bitbug">
+ *     <h2>Break every word in this heading</h2>
+ *     <p>And this paragraph too, <b data-solid>if</b> you can.</p>
+ *   </piix-breakout>
+ *
+ * Whatever you put inside stays normal, readable content until someone presses Play. Then
+ * every word becomes a brick, right where it sits on the page: a ball comes off a paddle (with
+ * a pal riding it), and each word it hits shatters into pixels of its own colour and is gone.
+ * Clear them all to win; lose every ball and the words fly back into place. Move with the
+ * pointer, a finger or the arrow keys; Space launches, Escape pauses. Words inside an element
+ * with data-solid are steel: the ball bounces off, but they never break.
+ *
+ *   pal       the pal riding the paddle (any pal name, or none)      default: bitbug
+ *   lives     balls you get                                           default: 3
+ *   speed     how fast the ball is, 0.5 to 2                          default: 1
+ *   tone      ball and paddle: lime | coral | violet | sky | sun | mint | ink | paper
+ *   field     room under the words for the paddle, in px              default: 150
+ *   sound     make sounds even without <piix-chiptune> ("off" to stay silent)
+ *
+ *   methods: play(), pause(), reset()
+ *   events: start, brick (detail: { word, score }), win (detail: { score }), lose (detail: { score }) */
+const BRK_SKIP = 'script,style,svg,canvas,video,audio,img,input,textarea,select,button,piix-pal,piix-sprite,[aria-hidden=true]';
+const BRK_INK = '#17121f';
+const BRK_HEART = '<svg viewBox="0 0 7 6" width="14" height="12" shape-rendering="crispEdges" aria-hidden="true"><path d="M1 0h2v1h1V0h2v1h1v2H6v1H5v1H4v1H3V5H2V4H1V3H0V1h1z"/></svg>';
+class PiixBreakoutElement extends HTMLElement {
+  static get observedAttributes() { return ['tone', 'field', 'pal']; }
+  constructor() {
+    super(); this.attachShadow({ mode: 'open' });
+    this._state = 'idle'; this._bricks = []; this._parts = []; this._pops = [];
+    this._keys = 0; this._fi = 0; this._ft = 0; this._mood = ''; this._moodT = 0;
+    this._loop = dt => this._tick(dt);
+  }
+  connectedCallback() {
+    if (!this.hasAttribute('tabindex')) this.tabIndex = 0;
+    if (!this.hasAttribute('role')) this.setAttribute('role', 'group');
+    this.setAttribute('aria-label', 'Breakout: the words here are the bricks');
+    this._build();
+    this._ro = new ResizeObserver(() => { this._size(); if (this._state !== 'idle') this._measure(); this._draw(); });
+    this._ro.observe(this);
+    this._io = new IntersectionObserver(([en]) => { if (!en.isIntersecting && (this._state === 'play' || this._state === 'serve')) this.pause(); });
+    this._io.observe(this);
+    this.addEventListener('pointermove', this._pm = e => {
+      if (!this._live()) return;
+      this._tx = e.clientX - this.getBoundingClientRect().left; this._keys = 0;
+    });
+    this.addEventListener('pointerdown', this._pd = e => {
+      if (e.composedPath().includes(this._go)) return;
+      if (this._state === 'serve') { this._tx = e.clientX - this.getBoundingClientRect().left; this._launch(); }
+    });
+    this.addEventListener('keydown', this._kd = e => {
+      const k = e.key, live = this._live();
+      if (k === 'ArrowLeft' || k === 'a' || k === 'A') { if (live) { this._keys = -1; e.preventDefault(); } }
+      else if (k === 'ArrowRight' || k === 'd' || k === 'D') { if (live) { this._keys = 1; e.preventDefault(); } }
+      else if (k === ' ' || k === 'Enter') {
+        if (e.target !== this) return;
+        e.preventDefault();
+        if (this._state === 'serve') this._launch(); else if (this._state !== 'play') this.play();
+      } else if ((k === 'Escape' || k === 'p' || k === 'P') && live) { e.preventDefault(); this.pause(); }
+    });
+    this.addEventListener('keyup', this._ku = e => { if (/^(Arrow(Left|Right)|[aAdD])$/.test(e.key)) this._keys = 0; });
+  }
+  disconnectedCallback() {
+    unsub(this._loop);
+    if (this._ro) this._ro.disconnect();
+    if (this._io) this._io.disconnect();
+    this.removeEventListener('pointermove', this._pm); this.removeEventListener('pointerdown', this._pd);
+    this.removeEventListener('keydown', this._kd); this.removeEventListener('keyup', this._ku);
+  }
+  attributeChangedCallback() { if (this.shadowRoot.firstChild) { this._build(); this._size(); this._draw(); } }
+  _live() { return this._state === 'play' || this._state === 'serve'; }
+  _field() { return Math.max(110, +this.getAttribute('field') || 150); }
+
+  _build() {
+    const [fill, ink] = kitTone(this);
+    this._fill = fill;
+    this.shadowRoot.innerHTML = `<style>
+:host{position:relative;display:block;padding-bottom:${this._field()}px;outline:none;-webkit-tap-highlight-color:transparent}
+:host(:focus-visible){outline:2px dashed ${BRK_INK};outline-offset:6px}
+:host([data-live]){cursor:none;user-select:none;-webkit-user-select:none}
+canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;image-rendering:pixelated;z-index:2}
+.go{all:unset;position:absolute;z-index:3;left:50%;bottom:${Math.round(this._field() / 2) - 4}px;transform:translateX(-50%);box-sizing:border-box;padding:4px;background:${BRK_INK};clip-path:${kitCorners(3)};cursor:pointer;text-align:center;white-space:nowrap}
+.go i{display:block;padding:9px 16px 8px;background:${fill};color:${ink};clip-path:${kitCorners(2)};font:400 14px/1 ${KIT_FONT};font-style:normal;text-transform:uppercase;letter-spacing:.06em;transition:transform 60ms steps(1)}
+.go small{display:block;margin-top:5px;font:400 10px/1 ${KIT_FONT};opacity:.75;letter-spacing:.04em}
+.go:hover i{transform:translateY(-1px)}
+.go:active i{transform:translateY(1px)}
+.go:focus-visible{outline:2px dashed ${BRK_INK};outline-offset:3px}
+.go[hidden]{display:none}
+.hud{position:absolute;z-index:3;left:4px;right:4px;bottom:6px;display:flex;justify-content:space-between;align-items:center;font:400 13px/1 ${KIT_FONT};letter-spacing:.06em;color:currentColor;pointer-events:none;opacity:0;transition:opacity .2s steps(2)}
+:host([data-hud]) .hud{opacity:.85}
+.hearts{display:flex;gap:4px;fill:#ff4a6b}
+.hearts svg.gone{fill:currentColor;opacity:.25}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style><slot></slot><canvas aria-hidden="true"></canvas><button class="go" type="button" part="button"><i></i></button><div class="hud" aria-hidden="true"><span class="hearts"></span><span class="score">0000</span></div><div class="sr" aria-live="polite"></div>`;
+    const $ = s => this.shadowRoot.querySelector(s);
+    this._cv = $('canvas'); this._g = this._cv.getContext('2d'); this._go = $('.go'); this._hearts = $('.hearts'); this._score = $('.score'); this._sr = $('.sr');
+    this._go.addEventListener('click', e => { e.stopPropagation(); this._state === 'paused' ? this._resume() : this.play(); });
+    this._label();
+    this._palCv = document.createElement('canvas');
+  }
+  _label() {
+    const [t, s] = { idle: ['▶ Play breakout', 'your words are the bricks'], paused: ['▶ Resume', 'paused'], won: ['▶ Play again', 'you cleared it!'], over: ['▶ Try again', 'game over'] }[this._state] || ['', ''];
+    this._go.hidden = this._live();
+    this._go.querySelector('i').innerHTML = `${t}<small>${s}</small>`;
+    this._go.setAttribute('aria-label', `${t.slice(2)}, ${s}`);
+  }
+  _size() {
+    const r = this.getBoundingClientRect(), d = Math.min(2, devicePixelRatio || 1);
+    this._W = r.width; this._H = r.height;
+    this._cv.width = Math.round(r.width * d); this._cv.height = Math.round(r.height * d);
+    this._g.setTransform(d, 0, 0, d, 0, 0); this._g.imageSmoothingEnabled = false;
+    this._pw = clamp(r.width * .16, 64, 120);
+    this._py = r.height - 34;
+    if (this._px == null) this._px = this._tx = r.width / 2;
+    this._px = clamp(this._px, this._pw / 2, r.width - this._pw / 2);
+    if (this._state === 'idle' || this._state === 'serve') { this._bx = this._px; this._by = this._py - 6; }
+  }
+
+  /* every word becomes a <span> of its own, so the ball can find it (done once, on first play) */
+  _wrap() {
+    if (this._wrapped) return;
+    this._wrapped = true;
+    const w = document.createTreeWalker(this, NodeFilter.SHOW_TEXT, { acceptNode: n => !n.data.trim() || (n.parentElement && n.parentElement.closest(BRK_SKIP)) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    const list = [];
+    for (let n = w.nextNode(); n; n = w.nextNode()) list.push(n);
+    for (const n of list) {
+      const f = document.createDocumentFragment();
+      for (const part of n.data.split(/(\s+)/)) {
+        if (!part) continue;
+        if (/^\s+$/.test(part)) { f.appendChild(document.createTextNode(part)); continue; }
+        const s = document.createElement('span');
+        s.className = 'piix-brick'; s.textContent = part;
+        s.style.transition = 'opacity .15s steps(2)';
+        f.appendChild(s);
+        this._bricks.push({ el: s, word: part, alive: true, solid: !!n.parentElement.closest('[data-solid]') });
+      }
+      n.replaceWith(f);
+    }
+  }
+  _measure() {
+    const h = this.getBoundingClientRect();
+    for (const b of this._bricks) {
+      const r = b.el.getBoundingClientRect();
+      b.x = r.left - h.left; b.y = r.top - h.top; b.w = r.width; b.h = r.height;
+      if (!b.c) b.c = getComputedStyle(b.el).color;
+    }
+  }
+
+  play() {
+    this._wrap();
+    this._bricks.forEach(b => { b.alive = true; b.el.style.opacity = ''; });
+    this._measure();
+    this._lives = clamp(+this.getAttribute('lives') || 3, 1, 9);
+    this._pts = 0; this._hits = 0; this._parts = []; this._pops = [];
+    this._serve();
+    this.toggleAttribute('data-hud', true);
+    this._hud();
+    if (document.activeElement !== this) this.focus({ preventScroll: true });
+    sfx('powerup', this);
+    this.dispatchEvent(new Event('start'));
+    this._say(`Breakout started. ${this._lives} balls. Arrow keys move, Space launches.`);
+  }
+  pause() {
+    if (!this._live()) return;
+    this._was = this._state; this._state = 'paused';
+    this._setLive(false); this._label();
+  }
+  _resume() { this._state = this._was || 'serve'; this._setLive(true); this._label(); this.focus({ preventScroll: true }); }
+  /* everything back to how it was before the game */
+  reset() {
+    this._state = 'idle'; this._setLive(false);
+    this._bricks.forEach(b => { b.alive = true; b.el.style.opacity = ''; });
+    this._parts = []; this._pops = [];
+    this.removeAttribute('data-hud'); this._label(); this._size(); this._draw();
+  }
+  _serve() { this._state = 'serve'; this._bx = this._px; this._by = this._py - 6; this._setLive(true); this._label(); }
+  _setLive(on) {
+    this.toggleAttribute('data-live', on);
+    this.style.touchAction = on ? 'none' : '';
+    if (on) sub(this._loop);
+  }
+  _launch() {
+    const sp = this._speed(), a = rnd(-.45, .45);
+    this._vx = Math.sin(a) * sp; this._vy = -Math.cos(a) * sp;
+    this._state = 'play';
+    sfx('launch', this);
+  }
+  _speed() { return 340 * clamp(+this.getAttribute('speed') || 1, .5, 2) * Math.min(1.7, Math.pow(1.012, this._hits || 0)); }
+  _hud() {
+    this._hearts.innerHTML = Array.from({ length: +this.getAttribute('lives') || 3 }, (_, i) => BRK_HEART.replace('<svg', `<svg class="${i < this._lives ? '' : 'gone'}"`)).join('');
+    this._score.textContent = String(this._pts).padStart(4, '0');
+  }
+  _say(t) { this._sr.textContent = t; }
+
+  _tick(dt) {
+    const W = this._W, H = this._H;
+    if (!W) return;
+    /* the paddle glides to where you point, or where the keys push it */
+    if (this._live()) {
+      if (this._keys) this._tx = this._px + this._keys * 90;
+      const prev = this._px;
+      this._px = clamp(this._px + (clamp(this._tx, 0, W) - this._px) * Math.min(1, dt * (this._keys ? 9 : 18)), this._pw / 2, W - this._pw / 2);
+      this._moving = Math.abs(this._px - prev) > .4;
+    }
+    if (this._state === 'serve') { this._bx = this._px; this._by = this._py - 6; }
+    if (this._state === 'play') {
+      const n = Math.max(1, Math.ceil(Math.hypot(this._vx, this._vy) * dt / 4));
+      for (let i = 0; i < n && this._state === 'play'; i++) this._step(dt / n);
+    }
+    for (const p of this._parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 900 * dt; p.t -= dt; }
+    this._parts = this._parts.filter(p => p.t > 0 && p.y < H + 10);
+    for (const p of this._pops) { p.y -= 40 * dt; p.t -= dt; }
+    this._pops = this._pops.filter(p => p.t > 0);
+    if (this._moodT > 0 && (this._moodT -= dt) <= 0) this._mood = '';
+    this._draw(dt);
+    if (!this._live() && !this._parts.length && !this._pops.length) unsub(this._loop);
+  }
+  _step(dt) {
+    const W = this._W, H = this._H, r = 5;
+    this._bx += this._vx * dt; this._by += this._vy * dt;
+    if (this._bx < r) { this._bx = r; this._vx = Math.abs(this._vx); sfx('bounce', this, { pitch: 1.6 }); }
+    if (this._bx > W - r) { this._bx = W - r; this._vx = -Math.abs(this._vx); sfx('bounce', this, { pitch: 1.6 }); }
+    if (this._by < r) { this._by = r; this._vy = Math.abs(this._vy); sfx('bounce', this, { pitch: 1.6 }); }
+    /* the paddle: where you hit it sets the angle you leave at */
+    const half = this._pw / 2;
+    if (this._vy > 0 && this._by + r >= this._py && this._by + r <= this._py + 14 && Math.abs(this._bx - this._px) <= half + r) {
+      let off = clamp((this._bx - this._px) / half, -1, 1) * 1.05;
+      /* never straight up: a dead-centre hit still leans a little, so the ball can't loop in one gap */
+      if (Math.abs(off) < .12) off = (off < 0 || (off === 0 && chance(.5)) ? -1 : 1) * .12;
+      const sp = this._speed();
+      this._vx = Math.sin(off) * sp; this._vy = -Math.cos(off) * sp; this._by = this._py - r;
+      sfx('bounce', this); this._mood = 'hop'; this._moodT = .25;
+    }
+    /* the words */
+    for (const b of this._bricks) {
+      if (!b.alive || !b.w) continue;
+      const ox = Math.min(this._bx + r, b.x + b.w) - Math.max(this._bx - r, b.x);
+      const oy = Math.min(this._by + r, b.y + b.h) - Math.max(this._by - r, b.y);
+      if (ox <= 0 || oy <= 0) continue;
+      if (ox < oy) { this._vx = this._bx < b.x + b.w / 2 ? -Math.abs(this._vx) : Math.abs(this._vx); }
+      else { this._vy = this._by < b.y + b.h / 2 ? -Math.abs(this._vy) : Math.abs(this._vy); }
+      if (b.solid) { sfx('hit', this); break; }
+      this._smash(b);
+      break;
+    }
+    if (this._by - r > H) this._miss();
+  }
+  _smash(b) {
+    b.alive = false; b.el.style.opacity = '0';
+    this._hits++;
+    const pts = 10 * Math.ceil(b.word.length / 4);
+    this._pts += pts; this._hud();
+    /* the word falls apart into pixels of its own colour */
+    const k = reduced() ? 6 : clamp(Math.round(b.w * b.h / 40), 10, 60);
+    for (let i = 0; i < k; i++) this._parts.push({ x: b.x + rnd(0, b.w), y: b.y + rnd(0, b.h), vx: rnd(-160, 160), vy: rnd(-260, -40), t: rnd(.5, 1.1), c: b.c, s: chance(.3) ? 4 : 3 });
+    this._pops.push({ x: b.x + b.w / 2, y: b.y, t: .7, txt: '+' + pts });
+    sfx('break', this, { pitch: rnd(.9, 1.15), gap: 0 });
+    this.dispatchEvent(new CustomEvent('brick', { detail: { word: b.word, score: this._pts } }));
+    if (!this._bricks.some(o => o.alive && !o.solid)) this._win();
+  }
+  _miss() {
+    this._lives--; this._hud();
+    this._mood = 'alarm'; this._moodT = .8;
+    if (this._lives > 0) { sfx('hit', this); this._say(`Missed. ${this._lives} left.`); this._serve(); return; }
+    this._state = 'over'; this._setLive(false); this._label();
+    sfx('lose', this);
+    this._say(`Game over. Score ${this._pts}.`);
+    this.dispatchEvent(new CustomEvent('lose', { detail: { score: this._pts } }));
+    /* the words fly back, one after another */
+    this._bricks.filter(b => !b.alive).forEach((b, i) => setTimeout(() => { if (this._state === 'over') { b.alive = true; b.el.style.opacity = ''; } }, 200 + i * 30));
+  }
+  _win() {
+    this._state = 'won'; this._setLive(false); this._label();
+    sfx('win', this);
+    this._say(`You cleared every word! Score ${this._pts}.`);
+    this.dispatchEvent(new CustomEvent('win', { detail: { score: this._pts } }));
+    const W = this._W, cols = ['#c6f432', '#ff6b4a', '#6b4cff', '#58c8ff', '#ffd23f'];
+    for (let i = 0; i < (reduced() ? 20 : 90); i++) this._parts.push({ x: rnd(0, W), y: rnd(-20, this._H * .4), vx: rnd(-80, 80), vy: rnd(-200, 40), t: rnd(.8, 1.8), c: pick(cols), s: 4 });
+    sub(this._loop);
+  }
+
+  _draw(dt = 0) {
+    const g = this._g, W = this._W, H = this._H;
+    if (!g || !W) return;
+    g.clearRect(0, 0, W, H);
+    const snap = v => Math.round(v);
+    for (const p of this._parts) { g.globalAlpha = clamp(p.t * 2, 0, 1); g.fillStyle = p.c; g.fillRect(snap(p.x), snap(p.y), p.s, p.s); }
+    g.globalAlpha = 1;
+    g.font = `400 12px ${KIT_FONT}`; g.textAlign = 'center';
+    for (const p of this._pops) { g.globalAlpha = clamp(p.t * 2, 0, 1); g.fillStyle = BRK_INK; g.fillText(p.txt, snap(p.x) + 1, snap(p.y) + 1); g.fillStyle = this._fill; g.fillText(p.txt, snap(p.x), snap(p.y)); }
+    g.globalAlpha = this._state === 'idle' || this._state === 'paused' ? .55 : 1;
+    /* the paddle: an ink outline with notched corners, a bright top edge */
+    const pw = Math.round(this._pw), x = snap(this._px - pw / 2), y = snap(this._py);
+    g.fillStyle = BRK_INK; g.fillRect(x - 2, y, pw + 4, 12); g.fillRect(x, y - 2, pw, 16);
+    g.fillStyle = this._fill; g.fillRect(x, y, pw, 10);
+    g.fillStyle = 'rgba(255,255,255,.55)'; g.fillRect(x + 2, y, pw - 4, 2);
+    g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(x, y + 8, pw, 2);
+    this._drawPal(g, dt, x + pw / 2, y - 2);
+    /* the ball */
+    if (this._state !== 'won' && this._state !== 'over') {
+      const bx = snap(this._bx) - 5, by = snap(this._by) - 5;
+      g.fillStyle = BRK_INK; g.fillRect(bx - 2, by, 14, 10); g.fillRect(bx, by - 2, 10, 14);
+      g.fillStyle = this._fill; g.fillRect(bx, by, 10, 10);
+      g.fillStyle = '#ffffff'; g.fillRect(bx + 2, by + 2, 3, 3);
+    }
+    g.globalAlpha = 1;
+  }
+  /* the pal rides the paddle: walks when it moves, hops on a bounce, panics on a miss */
+  _drawPal(g, dt, cx, floor) {
+    const name = this.getAttribute('pal') || 'bitbug';
+    if (name === 'none' || !SPRITES[name]) return;
+    const sp = SPRITES[name];
+    const clip = kitClip(name, [this._mood, this._moving ? 'walk' : 'idle', 'idle'].filter(Boolean));
+    if (clip !== this._clip) { this._clip = clip; this._fi = 0; }
+    this._ft += dt;
+    const fps = (sp.fps && sp.fps[clip]) || 6;
+    if (!reduced() && this._ft > 1 / fps) { this._ft = 0; this._fi = (this._fi + 1) % sp.frames[clip].length; }
+    const s = Math.max(1, Math.min(3, Math.floor(36 / sp.h)));
+    kitPal(this._palCv, name, clip, this._fi, s);
+    const hop = this._mood === 'hop' ? -4 : 0;
+    g.save();
+    if (this._vx < 0 && this._state === 'play') { g.translate(Math.round(cx), 0); g.scale(-1, 1); g.translate(-Math.round(cx), 0); }
+    g.drawImage(this._palCv, Math.round(cx - sp.w * s / 2), Math.round(floor - sp.h * s + hop));
+    g.restore();
+  }
+}
+define('piix-breakout', PiixBreakoutElement);
+ELEMENTS.breakout = 'piix-breakout';
+
 /* ---- gl/chart.js ---- */
 /* CHART: small dithered charts, drawn on the GPU.   @component chart
  *
@@ -11689,6 +12098,129 @@ class PiixChartElement extends GLStage {
 }
 define('piix-chart', PiixChartElement);
 ELEMENTS.chart = 'piix-chart';
+
+/* ---- gl/chiptune.js ---- */
+/* CHIPTUNE: 8-bit sounds for your whole page, from one tag.   @component chiptune
+ *
+ *   <piix-chiptune></piix-chiptune>
+ *   <button data-sfx="coin">Collect</button>
+ *
+ * Drop it anywhere and the page gets sound: links and buttons blip when you hover and click
+ * them, and every Piixpal game and dialogue box starts making noise. Every sound is made on
+ * the spot with WebAudio, so there are no audio files. It shows as a little pixel speaker;
+ * clicking it mutes the whole page, and the choice is remembered.
+ *
+ *   data-sfx="name"        on any element: play that sound when it's clicked
+ *   data-sfx-hover="name"  on any element: play that sound when the pointer arrives
+ *   sounds: hover click blip select type coin jump bounce launch hit break powerup success
+ *           error open close lose win boot. From code: Piixpal.sfx('coin')
+ *
+ *   wire      what gets sound by itself: hover, click, both or none      default: hover click
+ *   scope     a CSS selector: only wire things inside it                 default: the whole page
+ *   volume    0 to 1                                                     default: .25
+ *   float     pin the speaker to a corner: bottom-right | bottom-left | top-right | top-left
+ *   tone      the speaker's colour: lime | coral | violet | sky | sun | mint | ink | paper
+ *
+ *   events: mute (detail: { muted }) */
+const CHIP_HIT = 'a[href],button,[role=button],summary,label,input[type=checkbox],input[type=radio],select,piix-button,piix-glow-button,piix-toggle,piix-checkbox';
+/* the speaker, 9 x 7 pixels: s = speaker, w = sound waves, x = the cross when muted */
+const CHIP_ICON = [
+  '...s.....',
+  '..ss..w..',
+  'ssss...w.',
+  'ssss.w.w.',
+  'ssss...w.',
+  '..ss..w..',
+  '...s.....'
+];
+const CHIP_MUTE = [
+  '...s.....',
+  '..ss.....',
+  'ssss.x.x.',
+  'ssss..x..',
+  'ssss.x.x.',
+  '..ss.....',
+  '...s.....'
+];
+const chipSvg = rows => `<svg viewBox="0 0 9 7" width="27" height="21" shape-rendering="crispEdges" aria-hidden="true">${rows.map((r, y) => [...r].map((ch, x) => ch === '.' ? '' : `<rect x="${x}" y="${y}" width="1" height="1"/>`).join('')).join('')}</svg>`;
+class PiixChiptuneElement extends HTMLElement {
+  static get observedAttributes() { return ['volume', 'tone', 'float']; }
+  constructor() { super(); this.attachShadow({ mode: 'open' }); }
+  connectedCallback() {
+    SFX.on++;
+    this._vol();
+    this._build();
+    const inScope = t => { const s = this.getAttribute('scope'); return !s || !!t.closest(s); };
+    const wire = (this.getAttribute('wire') || 'hover click').split(/\s+/);
+    /* hovers: one blip per thing you arrive at, not one per pixel you move */
+    document.addEventListener('pointerover', this._over = e => {
+      if (e.pointerType === 'touch' || !e.target.closest) return;
+      const own = e.target.closest('[data-sfx-hover]');
+      const hit = own || (wire.includes('hover') && e.target.closest(CHIP_HIT));
+      if (!hit || hit === this._at || !inScope(hit)) return;
+      if (e.relatedTarget && hit.contains(e.relatedTarget)) return;
+      this._at = hit;
+      sfx(own ? own.getAttribute('data-sfx-hover') : 'hover', this);
+    });
+    document.addEventListener('pointerout', this._out = e => { if (this._at && !this._at.contains(e.relatedTarget)) this._at = null; });
+    document.addEventListener('click', this._click = e => {
+      if (!e.target.closest || this.contains(e.target) || e.composedPath().includes(this)) return;
+      const own = e.target.closest('[data-sfx]');
+      if (own && inScope(own)) return sfx(own.getAttribute('data-sfx'), this);
+      const hit = wire.includes('click') && e.target.closest(CHIP_HIT);
+      if (hit && inScope(hit)) sfx(hit.matches('a[href]') ? 'click' : 'select', this);
+    }, true);
+  }
+  disconnectedCallback() {
+    SFX.on = Math.max(0, SFX.on - 1);
+    document.removeEventListener('pointerover', this._over);
+    document.removeEventListener('pointerout', this._out);
+    document.removeEventListener('click', this._click, true);
+  }
+  attributeChangedCallback(n) { if (n === 'volume') this._vol(); else if (this.shadowRoot.firstChild) this._build(); }
+  _vol() {
+    const v = this.getAttribute('volume');
+    SFX.vol = v === null ? .25 : clamp(+v || 0, 0, 1);
+    if (SFX.out) SFX.out.gain.value = SFX.vol;
+  }
+  get muted() { return sfxMuted(); }
+  set muted(m) {
+    try { localStorage.setItem('piix-sfx', m ? 'off' : 'on'); } catch (_) {}
+    this._paint();
+    if (!m) sfx('coin', this);
+    this.dispatchEvent(new CustomEvent('mute', { detail: { muted: !!m } }));
+  }
+  _build() {
+    const [fill, ink] = kitTone(this);
+    const f = this.getAttribute('float');
+    const pin = f ? `position:fixed;z-index:2147483000;${f.includes('top') ? 'top' : 'bottom'}:16px;${f.includes('left') ? 'left' : 'right'}:16px;` : '';
+    this.shadowRoot.innerHTML = `<style>
+:host{display:inline-block;vertical-align:middle;${pin}}
+:host([hidden]){display:none}
+button{all:unset;box-sizing:border-box;display:grid;place-items:center;width:46px;height:42px;cursor:pointer;background:#17121f;clip-path:${kitCorners(3)};padding:3px}
+i{display:grid;place-items:center;width:100%;height:100%;background:${fill};color:${ink};clip-path:${kitCorners(2)};transition:transform 60ms steps(1)}
+svg{fill:currentColor}
+button:hover i{transform:translateY(-1px)}
+button:active i{transform:translateY(1px)}
+button:focus-visible{outline:2px dashed #17121f;outline-offset:3px}
+:host([data-muted]) i{filter:saturate(.25) brightness(.92)}
+</style><button type="button" part="button"><i></i></button>`;
+    this.shadowRoot.querySelector('button').addEventListener('click', () => { this.muted = !this.muted; });
+    this._paint();
+  }
+  _paint() {
+    const m = sfxMuted(), b = this.shadowRoot.querySelector('button');
+    if (!b) return;
+    b.querySelector('i').innerHTML = chipSvg(m ? CHIP_MUTE : CHIP_ICON);
+    b.setAttribute('aria-label', 'Sound');
+    b.setAttribute('aria-pressed', String(!m));
+    this.toggleAttribute('data-muted', m);
+  }
+}
+define('piix-chiptune', PiixChiptuneElement);
+ELEMENTS.chiptune = 'piix-chiptune';
+/* play any sound from your own code: Piixpal.sfx('coin'), Piixpal.sfx('jump', { pitch: 1.5 }) */
+Piixpal.sfx = (name, opts = {}) => sfx(name, null, Object.assign({}, opts, { force: true }));
 
 /* ---- gl/cursor.js ---- */
 /* CURSOR: a pixel trail, or a glow, that follows the pointer across the whole page.   @component cursor
@@ -12504,6 +13036,257 @@ class PiixGlowCardElement extends GLStage {
 define('piix-glow-card', PiixGlowCardElement);
 ELEMENTS['glow-card'] = 'piix-glow-card';
 
+/* ---- gl/handheld.js ---- */
+/* HANDHELD: a pocket game console, and anything you put inside plays on its screen.   @component handheld
+ *
+ *   <piix-handheld>
+ *     <h3>Save file 1</h3>
+ *     <p>Real HTML, shown in four shades of green.</p>
+ *     <a href="/blog">Continue ▸</a>
+ *   </piix-handheld>
+ *
+ * A chunky handheld with a power light, a D-pad, A and B, Select and Start. Your content is
+ * live, real HTML on its screen, recoloured into four LCD shades with a dot-matrix grid on
+ * top (links still work, text can still be selected). It boots with the logo sliding down
+ * the first time it scrolls into view.
+ *
+ *   ▲ ▼       scroll the screen (hold to keep going)
+ *   ◀ ▶       move the cursor between the links and buttons on the screen
+ *   A         press what the cursor is on        B   back to the top
+ *   SELECT    change the screen colours          START   boot it again
+ *   Keyboard (while it has focus): arrows, X = A, Z = B, Enter = Start, C = Select.
+ *
+ * Every press fires a cancelable "press" event first (detail: { button }), so you can build
+ * your own game on it: call event.preventDefault() and the console does nothing by itself.
+ *
+ *   screen    dmg | pocket | light | grape | color (no filter)     default: dmg
+ *   color     the shell: classic | lime | grape | ink | coral     default: classic
+ *   width     any CSS length                                      default: 320px
+ *   brand     the name on the front                               default: Piixpal
+ *   boot      off: skip the boot screen
+ *   font      pixel | inherit (use the page's font)               default: pixel
+ *   sound     make sounds even without <piix-chiptune> ("off" to stay silent)
+ *
+ *   events: press (detail: { button }), screen (detail: { screen }) */
+const HH_SCREENS = {
+  dmg: ['#0f380f', '#306230', '#8bac0f', '#9bbc0f'],
+  pocket: ['#1f1f1f', '#4d4d4d', '#8c8c85', '#c5c7bd'],
+  light: ['#00303a', '#0a6b6b', '#2fb0a0', '#8ef0d4'],
+  grape: ['#17121f', '#4a2f8f', '#9d7bff', '#e9e2ff'],
+  color: null
+};
+/* shell, bezel, A/B, D-pad, lettering */
+const HH_SHELLS = {
+  classic: ['#cbc7bf', '#605d70', '#a3245a', '#2d2b35', '#2f2a7c'],
+  lime: ['#c6f432', '#17121f', '#6b4cff', '#17121f', '#17121f'],
+  grape: ['#7b5cff', '#221a3a', '#c6f432', '#17121f', '#f2eef8'],
+  ink: ['#251f2f', '#0d0a12', '#ff6b4a', '#0d0a12', '#c6f432'],
+  coral: ['#ff7a5c', '#2b1a24', '#ffd23f', '#2b1a24', '#2b1a24']
+};
+const HH_KEYS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', x: 'a', X: 'a', k: 'a', z: 'b', Z: 'b', j: 'b', Enter: 'start', c: 'select', C: 'select' };
+const HH_FOCUS = 'a[href],button,input,select,textarea,summary,[tabindex]:not([tabindex="-1"]),piix-button,piix-glow-button';
+const hhHex = h => hexRGBA(h).slice(0, 3).map(v => (v / 255).toFixed(3));
+/* luminance, then cut into four steps, each step painted one shade */
+const hhFilter = (id, shades) => {
+  const c = shades.map(hhHex);
+  return `<filter id="${id}" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values=".3 .59 .11 0 0 .3 .59 .11 0 0 .3 .59 .11 0 0 0 0 0 1 0"/><feComponentTransfer>${['R', 'G', 'B'].map((ch, k) => `<feFunc${ch} type="discrete" tableValues="${c.map(v => v[k]).join(' ')}"/>`).join('')}</feComponentTransfer></filter>`;
+};
+let HH_N = 0;
+class PiixHandheldElement extends HTMLElement {
+  static get observedAttributes() { return ['screen', 'color', 'width', 'brand', 'font']; }
+  constructor() { super(); this.attachShadow({ mode: 'open' }); this._id = 'piix-hh-' + (++HH_N); this._sel = null; }
+  connectedCallback() {
+    if (!this.hasAttribute('role')) this.setAttribute('role', 'group');
+    if (!this.hasAttribute('aria-label')) this.setAttribute('aria-label', 'Handheld console');
+    this._build();
+    this.addEventListener('keydown', this._kd = e => {
+      const b = HH_KEYS[e.key], t = e.composedPath()[0];
+      if (!b || e.altKey || e.ctrlKey || e.metaKey || (t && t.closest && t.closest('input,textarea,select,[contenteditable]'))) return;
+      /* Enter on a link inside the screen still opens the link */
+      if (b === 'start' && t !== this && t !== this._view) return;
+      e.preventDefault();
+      this._down(b, true);
+      if (!e.repeat || /up|down|left|right/.test(b)) this.press(b);
+    });
+    this.addEventListener('keyup', this._ku = e => { const b = HH_KEYS[e.key]; if (b) this._down(b, false); });
+    this._io = new IntersectionObserver(([en]) => { if (en.isIntersecting && !this._booted) this._boot(); });
+    this._io.observe(this);
+  }
+  disconnectedCallback() { if (this._io) this._io.disconnect(); clearInterval(this._rep); clearTimeout(this._rep0); this.removeEventListener('keydown', this._kd); this.removeEventListener('keyup', this._ku); }
+  attributeChangedCallback() { if (this.shadowRoot.firstChild) { this._build(); if (this._booted) this.toggleAttribute('data-on', true); } }
+  get screen() { const s = this.getAttribute('screen'); return s in HH_SCREENS ? s : 'dmg'; }
+
+  _build() {
+    const [shell, bezel, ab, pad, ink] = HH_SHELLS[this.getAttribute('color')] || HH_SHELLS.classic;
+    const shades = HH_SCREENS[this.screen];
+    const lcd = shades ? shades[3] : '#f4f1ea', dark = shades ? shades[0] : '#17121f';
+    const font = this.getAttribute('font') === 'inherit' ? 'inherit' : `400 13px/1.5 ${KIT_FONT}`;
+    const brand = (this.getAttribute('brand') || 'Piixpal').replace(/[<&]/g, '');
+    const w = this.getAttribute('width') || '320px';
+    const btn = (cls, label, txt = '') => `<button type="button" class="btn ${cls}" data-b="${cls}" aria-label="${label}" part="button ${cls}">${txt}</button>`;
+    this.shadowRoot.innerHTML = `<svg width="0" height="0" style="position:absolute" aria-hidden="true">${shades ? hhFilter(this._id, shades) : ''}</svg><style>
+:host{display:inline-block;vertical-align:top;--w:${w};-webkit-tap-highlight-color:transparent}
+.dev{position:relative;box-sizing:border-box;width:var(--w);max-width:100%;font-size:calc(var(--w) / 20);padding:1.1em 1.15em 1.6em;background:${shell};border-radius:.55em .55em 2.8em .55em;
+  box-shadow:inset -.22em -.28em 0 rgba(0,0,0,.14),inset .18em .18em 0 rgba(255,255,255,.35),0 .55em 1.1em -.3em rgba(23,18,31,.45);color:${ink};user-select:none;-webkit-user-select:none}
+.dev::before{content:'';position:absolute;left:.6em;right:.6em;top:.45em;height:.12em;border-top:.06em solid rgba(0,0,0,.18);border-bottom:.06em solid rgba(0,0,0,.18)}
+.bez{position:relative;padding:1.05em 1.7em .9em;background:${bezel};border-radius:.45em .45em 1.6em .45em;margin-top:.35em}
+.tag{position:absolute;left:1.2em;right:1.2em;top:.36em;display:flex;align-items:center;gap:.35em;font:400 .34em/1 ${KIT_FONT};letter-spacing:.06em;color:rgba(255,255,255,.62);white-space:nowrap;overflow:hidden}
+.tag::before,.tag::after{content:'';flex:1;height:.4em;border-top:.18em solid #a3245a;border-bottom:.18em solid #3f3c9a}
+.led{position:absolute;left:.55em;top:42%;width:.5em;height:.5em;border-radius:50%;background:#3a1717;box-shadow:inset 0 0 0 .06em rgba(0,0,0,.4)}
+:host([data-on]) .led{background:#ff3b3b;box-shadow:0 0 .35em #ff3b3b,inset 0 0 0 .06em rgba(0,0,0,.3)}
+.bat{position:absolute;left:.25em;top:calc(42% + .75em);font:400 .26em/1 ${KIT_FONT};color:rgba(255,255,255,.55);letter-spacing:.04em}
+.scr{position:relative;aspect-ratio:10/9;overflow:hidden;background:${lcd};box-shadow:inset .12em .12em 0 rgba(0,0,0,.35)}
+.lcd{position:absolute;inset:0;${shades ? `filter:url(#${this._id})` : ''}}
+.view{position:absolute;inset:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:none;padding:.7em .8em;box-sizing:border-box;font:${font};color:${dark};background:${lcd};outline:none;user-select:text;-webkit-user-select:text}
+.view::-webkit-scrollbar{display:none}
+::slotted(*){max-width:100%}
+::slotted(:first-child){margin-top:0!important}
+::slotted(img){image-rendering:pixelated}
+.boot{position:absolute;inset:0;display:grid;place-items:center;background:${lcd};color:${dark};pointer-events:none;visibility:hidden}
+.boot b{font:400 1.25em/1 ${KIT_FONT};letter-spacing:.04em;transform:translateY(-4.5em)}
+:host([data-booting]) .boot{visibility:visible}
+:host([data-booting]) .boot b{animation:piixboot 1.5s steps(15) forwards}
+:host([data-booting][data-fade]) .boot{animation:piixfade .4s steps(4) forwards}
+@keyframes piixboot{to{transform:none}}
+@keyframes piixfade{to{opacity:0}}
+.dots{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(0,0,0,.075) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.075) 1px,transparent 1px);background-size:3px 3px;box-shadow:inset .1em .1em .25em rgba(0,0,0,.25)}
+.bar{position:absolute;right:2px;top:4px;bottom:4px;width:3px;pointer-events:none;opacity:0;transition:opacity .3s steps(2)}
+.bar i{position:absolute;left:0;width:3px;background:${dark};opacity:.6}
+:host([data-scrolls]) .bar{opacity:1}
+.cur{position:absolute;width:6px;height:10px;background:${dark};clip-path:polygon(0 0,33% 0,33% 20%,66% 20%,66% 40%,100% 40%,100% 60%,66% 60%,66% 80%,33% 80%,33% 100%,0 100%);pointer-events:none;display:none;animation:piixnudge .6s steps(2) infinite}
+@keyframes piixnudge{50%{transform:translateX(2px)}}
+.brand{margin:.55em 0 0 .1em;font:italic 700 .95em/1 "Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-.02em}
+.brand span{font:400 .62em/1 ${KIT_FONT};font-style:normal;letter-spacing:.08em;margin-left:.35em;opacity:.8}
+.ctl{position:relative;height:8.4em;margin-top:.7em}
+.btn{all:unset;box-sizing:border-box;position:absolute;cursor:pointer;touch-action:manipulation}
+.btn:focus-visible{outline:.12em dashed ${ink};outline-offset:.15em}
+.dpad{position:absolute;left:.4em;top:.8em;width:4.2em;height:4.2em}
+.dpad::before,.dpad::after{content:'';position:absolute;background:${pad};border-radius:.18em;box-shadow:inset -.1em -.12em 0 rgba(0,0,0,.35),0 .12em 0 rgba(0,0,0,.25)}
+.dpad::before{left:1.4em;top:0;width:1.4em;height:4.2em}
+.dpad::after{left:0;top:1.4em;width:4.2em;height:1.4em}
+.dpad .btn{z-index:1;width:1.4em;height:1.4em;display:grid;place-items:center}
+.dpad .btn::after{content:'';width:.42em;height:.42em;background:rgba(255,255,255,.18);clip-path:polygon(50% 0,100% 100%,0 100%)}
+.up{left:1.4em;top:0}.down{left:1.4em;top:2.8em}.left{left:0;top:1.4em}.right{left:2.8em;top:1.4em}
+.down::after{transform:rotate(180deg)}.left::after{transform:rotate(-90deg)}.right::after{transform:rotate(90deg)}
+.dpad .btn[data-down],.dpad .btn:active{background:rgba(0,0,0,.35)}
+.ab{position:absolute;right:.2em;top:.5em;width:6.2em;height:3.6em;transform:rotate(-25deg)}
+.ab .btn{width:2.3em;height:2.3em;border-radius:50%;background:${ab};box-shadow:inset -.12em -.16em 0 rgba(0,0,0,.3),0 .14em 0 rgba(0,0,0,.28);transition:transform 40ms steps(1)}
+.ab .btn[data-down],.ab .btn:active{transform:translateY(.12em);box-shadow:inset .08em .1em 0 rgba(0,0,0,.3)}
+.ab .b{left:0;top:1em}.ab .a{right:0;top:0}
+.ab small{position:absolute;font:400 .55em/1 ${KIT_FONT};letter-spacing:.08em}
+.ab .lb{left:1.6em;top:6.1em}.ab .la{right:1.4em;top:4.3em}
+.ss{position:absolute;left:42%;bottom:.5em;display:flex;gap:1.1em;transform:translateX(-50%)}
+.ss div{display:flex;flex-direction:column;align-items:center;gap:.35em;transform:rotate(-25deg)}
+.ss .btn{position:relative;width:2.3em;height:.6em;border-radius:.3em;background:${pad};opacity:.85;box-shadow:inset -.06em -.08em 0 rgba(0,0,0,.4)}
+.ss .btn[data-down],.ss .btn:active{transform:translateY(.08em)}
+.ss small{font:400 .38em/1 ${KIT_FONT};letter-spacing:.08em}
+.spk{position:absolute;right:1.5em;bottom:1.5em;display:flex;gap:.32em;transform:rotate(-25deg)}
+.spk i{width:.26em;height:2.3em;border-radius:.13em;background:rgba(0,0,0,.2);box-shadow:inset .05em .05em 0 rgba(0,0,0,.25)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.cur{animation:none}}
+</style><div class="dev" part="device">
+<div class="bez"><span class="tag">pixel matrix with chiptune sound</span><span class="led" aria-hidden="true"></span><span class="bat" aria-hidden="true">BATTERY</span>
+<div class="scr" part="screen"><div class="lcd"><div class="view" tabindex="0" role="region" aria-label="Screen"><slot></slot></div><div class="boot" aria-hidden="true"><b>${brand}</b></div></div><div class="dots"></div><div class="bar"><i></i></div><span class="cur" aria-hidden="true"></span></div></div>
+<p class="brand">${brand}<span>BOY</span></p>
+<div class="ctl"><div class="dpad">${btn('up', 'Up')}${btn('down', 'Down')}${btn('left', 'Previous link')}${btn('right', 'Next link')}</div>
+<div class="ab">${btn('b', 'B: back to top')}${btn('a', 'A: press')}<small class="lb">B</small><small class="la">A</small></div>
+<div class="ss"><div>${btn('select', 'Select: change screen colours')}<small>SELECT</small></div><div>${btn('start', 'Start')}<small>START</small></div></div></div>
+<div class="spk" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+</div><div class="sr" aria-live="polite"></div>`;
+    const $ = s => this.shadowRoot.querySelector(s);
+    this._view = $('.view'); this._bar = $('.bar i'); this._cur = $('.cur'); this._scr = $('.scr'); this._sr = $('.sr');
+    /* buttons: press on pointer down (and keep going while held, for the arrows) */
+    this.shadowRoot.querySelectorAll('.btn').forEach(b => {
+      const name = b.dataset.b;
+      b.addEventListener('pointerdown', e => {
+        e.preventDefault(); b.setPointerCapture && b.setPointerCapture(e.pointerId);
+        this._down(name, true); this.press(name);
+        if (/up|down/.test(name)) { clearTimeout(this._rep0); this._rep0 = setTimeout(() => { this._rep = setInterval(() => this.press(name), 90); }, 320); }
+      });
+      const up = () => { this._down(name, false); clearTimeout(this._rep0); clearInterval(this._rep); };
+      b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
+      /* keyboard users tab to a button and press Enter or Space */
+      b.addEventListener('click', e => { if (e.detail === 0) this.press(name); });
+    });
+    this._view.addEventListener('scroll', () => { this._bars(); this._place(); }, { passive: true });
+    new ResizeObserver(() => { this._bars(); this._place(); }).observe(this._view);
+    this._bars();
+  }
+  _down(name, on) { const b = this.shadowRoot.querySelector(`[data-b="${name}"]`); if (b) b.toggleAttribute('data-down', on); }
+
+  /* one press: tell the page first, then do the console's own thing unless it said no */
+  press(name) {
+    const ev = new CustomEvent('press', { detail: { button: name }, bubbles: true, composed: true, cancelable: true });
+    this.dispatchEvent(ev);
+    if (ev.defaultPrevented) return;
+    const v = this._view, smooth = reduced() ? 'auto' : 'smooth';
+    if (name === 'up' || name === 'down') { v.scrollBy({ top: (name === 'up' ? -1 : 1) * v.clientHeight * .3, behavior: smooth }); sfx('blip', this, { pitch: name === 'up' ? 1.1 : .9 }); }
+    else if (name === 'left' || name === 'right') this._move(name === 'right' ? 1 : -1);
+    else if (name === 'a') { if (this._sel && this._sel.isConnected) { sfx('select', this); this._sel.click(); } else sfx('error', this); }
+    else if (name === 'b') { this._select(null); v.scrollTo({ top: 0, behavior: smooth }); sfx('close', this); }
+    else if (name === 'select') this._cycle();
+    else if (name === 'start') this._boot(true);
+  }
+  /* the cursor hops between the links and buttons on the screen */
+  _move(d) {
+    const all = [...this.querySelectorAll(HH_FOCUS)].filter(el => el.getClientRects().length);
+    if (!all.length) { this._view.scrollBy({ top: d * this._view.clientHeight * .9, behavior: reduced() ? 'auto' : 'smooth' }); sfx('blip', this); return; }
+    const i = all.indexOf(this._sel);
+    this._select(all[i < 0 ? (d > 0 ? 0 : all.length - 1) : (i + d + all.length) % all.length]);
+    sfx('blip', this);
+  }
+  _select(el) {
+    this._sel = el;
+    if (el) {
+      const v = this._view, r = el.getBoundingClientRect(), vr = v.getBoundingClientRect();
+      if (r.top < vr.top + 8 || r.bottom > vr.bottom - 8) v.scrollBy({ top: r.top - vr.top - vr.height / 3, behavior: reduced() ? 'auto' : 'smooth' });
+      if (el.focus) el.focus({ preventScroll: true });
+      this._sr.textContent = (el.textContent || el.getAttribute('aria-label') || '').trim();
+    }
+    this._place();
+  }
+  _place() {
+    const c = this._cur, el = this._sel;
+    if (!c) return;
+    if (!el || !el.isConnected) { c.style.display = 'none'; return; }
+    const r = el.getBoundingClientRect(), s = this._scr.getBoundingClientRect();
+    const y = r.top - s.top + Math.min(r.height, 22) / 2 - 5;
+    c.style.display = y < -10 || y > s.height ? 'none' : 'block';
+    c.style.left = Math.max(1, r.left - s.left - 10) + 'px'; c.style.top = y + 'px';
+  }
+  _bars() {
+    const v = this._view;
+    if (!v) return;
+    const over = v.scrollHeight > v.clientHeight + 2;
+    this.toggleAttribute('data-scrolls', over);
+    if (!over) return;
+    const h = v.clientHeight / v.scrollHeight;
+    this._bar.style.height = h * 100 + '%';
+    this._bar.style.top = (v.scrollTop / (v.scrollHeight - v.clientHeight)) * (1 - h) * 100 + '%';
+  }
+  _cycle() {
+    const list = Object.keys(HH_SCREENS), next = list[(list.indexOf(this.screen) + 1) % list.length];
+    this.setAttribute('screen', next);
+    sfx('blip', this, { pitch: 1.3 });
+    this._sr.textContent = `Screen: ${next}`;
+    this.dispatchEvent(new CustomEvent('screen', { detail: { screen: next } }));
+  }
+  /* the logo slides down, the console dings, the game appears */
+  _boot(again) {
+    this._booted = true;
+    clearTimeout(this._b1); clearTimeout(this._b2);
+    this.removeAttribute('data-fade');
+    this.toggleAttribute('data-on', true);
+    if (this.getAttribute('boot') === 'off' || reduced()) { this.removeAttribute('data-booting'); if (again) sfx('boot', this); return; }
+    /* restart the slide even if it ran before */
+    this.removeAttribute('data-booting'); void this.offsetWidth; this.toggleAttribute('data-booting', true);
+    this._b1 = setTimeout(() => sfx('boot', this), 1500);
+    this._b2 = setTimeout(() => { this.toggleAttribute('data-fade', true); setTimeout(() => { this.removeAttribute('data-booting'); this.removeAttribute('data-fade'); }, 420); }, 2300);
+  }
+}
+define('piix-handheld', PiixHandheldElement);
+ELEMENTS.handheld = 'piix-handheld';
+
 /* ---- gl/hero.js ---- */
 /* HERO: a whole hero section on a GPU pixel background.   @component hero  @needs shader  @needs scene  @needs fx  @needs image-fx
  *
@@ -13058,6 +13841,263 @@ class PiixRevealElement extends GLStage {
 }
 define('piix-reveal', PiixRevealElement);
 ELEMENTS.reveal = 'piix-reveal';
+
+/* ---- gl/rpgbox.js ---- */
+/* RPG BOX: a JRPG dialogue box. A pal talks, the words type out, you pick an answer.   @component rpg-box
+ *
+ *   <piix-rpg-box pal="kitty" name="Kit">
+ *     <p>Oh! A visitor. Nobody comes down here anymore.</p>
+ *     <p>Want to see what I've been <b>building</b>?</p>
+ *     <menu>
+ *       <button value="yes" data-goto="tour">Show me!</button>
+ *       <button value="no">Maybe later</button>
+ *     </menu>
+ *     <p data-end>Alright. I'll be here, typing.</p>
+ *     <p id="tour" data-clip="hop">Follow me!</p>
+ *   </piix-rpg-box>
+ *
+ * Every child is one page of dialogue. The words type out letter by letter (bold, links and
+ * line breaks included) while the pal's portrait talks, with a short beat after every full
+ * stop. Click, Enter or Space finishes the page, or turns to the next one. A <menu> of buttons
+ * becomes a choice: arrow keys move the cursor, Enter picks. data-goto="an id" jumps to that
+ * page, so dialogue can branch. It starts when it scrolls into view.
+ *
+ * On any page:  data-pal, data-name   who says this one (else the box's own)
+ *               data-clip             the portrait's mood: any of that pal's clips (alarm, hop…)
+ *               data-speed            letters per second for this page
+ *               data-end              the conversation ends here
+ *
+ *   pal       the pal in the portrait (any pal name, or none)     default: none
+ *   name      the speaker's name, shown on the box
+ *   theme     classic | dark | paper | lime                       default: classic
+ *   speed     letters per second                                  default: 40
+ *   voice     how high the typing blips are, 0.5 to 2             default: 1
+ *   lines     the text area is at least this many lines tall      default: 3
+ *   auto      turn the page by itself after this many ms
+ *   loop      start again after the last page
+ *   font      pixel | inherit (use the page's font)               default: pixel
+ *   sound     make sounds even without <piix-chiptune> ("off" to stay silent)
+ *
+ *   methods: next(), restart(), say(html, { pal, name, clip })
+ *   events: page (detail: { index, id }), choice (detail: { value, label, index }), done */
+const RPG_THEMES = {
+  classic: ['#f4f1ff', 'linear-gradient(180deg,#3047c9,#141f78 70%,#0e1659)', '#ffffff', '#ffd23f', 'rgba(255,255,255,.08)'],
+  dark: ['#f2eef8', '#17121f', '#f2eef8', '#c6f432', 'rgba(255,255,255,.06)'],
+  paper: ['#17121f', '#fbf8f1', '#17121f', '#6b4cff', 'rgba(23,18,31,.06)'],
+  lime: ['#17121f', '#c6f432', '#17121f', '#17121f', 'rgba(23,18,31,.1)']
+};
+/* a little pause after these, in letters' worth of time */
+const RPG_BEAT = { '.': 7, '!': 7, '?': 7, ',': 3, ';': 3, ':': 3, '—': 3 };
+class PiixRpgBoxElement extends HTMLElement {
+  static get observedAttributes() { return ['theme', 'pal', 'name', 'lines', 'font']; }
+  constructor() {
+    super(); this.attachShadow({ mode: 'open' });
+    this._state = 'idle'; this._i = -1; this._fi = 0; this._ft = 0; this._clip = '';
+    this._loop = dt => this._tick(dt);
+  }
+  connectedCallback() {
+    if (!this.hasAttribute('tabindex')) this.tabIndex = 0;
+    if (!this.hasAttribute('role')) this.setAttribute('role', 'group');
+    this._build();
+    this.addEventListener('click', this._onClick = e => { if (!e.composedPath().includes(this._menu)) this.next(); });
+    this.addEventListener('keydown', this._onKey = e => {
+      if (e.target !== this || !['Enter', ' ', 'z', 'Z'].includes(e.key)) return;
+      e.preventDefault(); this.next();
+    });
+    /* start when it scrolls into view, and only animate while it is on screen */
+    this._io = new IntersectionObserver(([en]) => {
+      if (en.isIntersecting) { if (this._state === 'idle') this.restart(); sub(this._loop); } else unsub(this._loop);
+    });
+    this._io.observe(this);
+  }
+  disconnectedCallback() {
+    if (this._io) this._io.disconnect();
+    unsub(this._loop); clearTimeout(this._auto);
+    this.removeEventListener('click', this._onClick); this.removeEventListener('keydown', this._onKey);
+  }
+  attributeChangedCallback() {
+    if (!this.shadowRoot.firstChild) return;
+    this._build();
+    if (this._state !== 'idle' && this._pages) this._show(this._i, true);
+  }
+
+  _build() {
+    const [edge, bg, ink, nameC, tint] = RPG_THEMES[this.getAttribute('theme')] || RPG_THEMES.classic;
+    const font = this.getAttribute('font') === 'inherit' ? 'inherit' : `400 17px/1.55 ${KIT_FONT}`;
+    const lines = +this.getAttribute('lines') || 3;
+    this.shadowRoot.innerHTML = `<style>
+:host{display:block;max-width:100%;cursor:pointer;outline:none;-webkit-tap-highlight-color:transparent}
+:host(:focus-visible) .box{outline:2px dashed ${edge === '#17121f' ? '#6b4cff' : edge};outline-offset:4px}
+.box{position:relative;background:${edge};clip-path:${kitCorners(4)};padding:4px}
+.in{position:relative;display:flex;gap:16px;align-items:flex-start;padding:16px 20px 22px;background:${bg};color:${ink};clip-path:${kitCorners(2)}}
+.por{flex:none;display:grid;place-items:end center;width:84px;height:84px;background:${tint};clip-path:${kitCorners(2)}}
+.por[hidden]{display:none}
+.por canvas{image-rendering:pixelated;transform-origin:50% 100%;margin-bottom:6px}
+.main{flex:1;min-width:0}
+.name{margin:0 0 6px;font:400 13px/1 ${KIT_FONT};letter-spacing:.08em;text-transform:uppercase;color:${nameC}}
+.name:empty{display:none}
+.txt{min-height:calc(${lines} * 1.55em);font:${font};overflow-wrap:break-word}
+.txt>*{margin:0}
+.txt a{color:${nameC}}
+.txt b,.txt strong{color:${nameC};font-weight:inherit}
+.more{position:absolute;right:16px;bottom:10px;width:12px;height:8px;background:${ink};clip-path:polygon(0 0,100% 0,100% 25%,75% 25%,75% 50%,62% 50%,62% 75%,50% 75%,50% 100%,38% 75%,38% 50%,25% 50%,25% 25%,0 25%);opacity:0}
+:host([data-wait]) .more{opacity:1;animation:piixmore .7s steps(2) infinite}
+@keyframes piixmore{50%{transform:translateY(3px)}}
+.menu{display:flex;flex-direction:column;align-items:flex-start;gap:2px;margin-top:10px}
+.menu:empty{display:none}
+.menu button{all:unset;position:relative;padding:3px 10px 3px 24px;font:${font};color:${ink};cursor:pointer}
+.menu button::before{content:'';position:absolute;left:4px;top:50%;width:8px;height:12px;margin-top:-6px;background:currentColor;clip-path:polygon(0 0,25% 0,25% 17%,50% 17%,50% 33%,75% 33%,75% 50%,100% 50%,75% 50%,75% 67%,50% 67%,50% 83%,25% 83%,25% 100%,0 100%);opacity:0}
+.menu button:focus::before{opacity:1;animation:piixnudge .6s steps(2) infinite}
+.menu button:focus{color:${nameC}}
+@keyframes piixnudge{50%{transform:translateX(3px)}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (max-width:520px){.por{width:60px;height:60px}.in{gap:12px;padding:12px 14px 20px}.txt,.menu button{font-size:15px}}
+@media (prefers-reduced-motion:reduce){:host([data-wait]) .more,.menu button::before{animation:none!important}}
+</style><div class="box" part="box"><div class="in"><div class="por" part="portrait" aria-hidden="true"><canvas></canvas></div><div class="main"><p class="name" part="name"></p><div class="txt" part="text" aria-hidden="true"></div><div class="menu" part="menu"></div></div><span class="more" aria-hidden="true"></span></div></div><div class="sr" aria-live="polite"></div>`;
+    const $ = s => this.shadowRoot.querySelector(s);
+    this._txt = $('.txt'); this._name = $('.name'); this._menu = $('.menu'); this._sr = $('.sr'); this._por = $('.por'); this._cv = $('canvas');
+    this._menu.addEventListener('keydown', e => {
+      const bs = [...this._menu.children], i = bs.indexOf(this.shadowRoot.activeElement);
+      const d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+      if (!d || i < 0) return;
+      e.preventDefault(); bs[(i + d + bs.length) % bs.length].focus(); sfx('blip', this);
+    });
+    this._paintSpeaker();
+  }
+
+  /* the pages, read fresh from the children */
+  _read() { this._pages = [...this.children].filter(c => !['SCRIPT', 'STYLE', 'TEMPLATE'].includes(c.tagName)); }
+  restart() { this._read(); this._show(0); }
+  say(html, o = {}) {
+    const p = document.createElement('p'); p.innerHTML = html;
+    if (o.pal) p.dataset.pal = o.pal;
+    if (o.name) p.dataset.name = o.name;
+    if (o.clip) p.dataset.clip = o.clip;
+    this._pages = [p]; this._show(0);
+  }
+  /* finish the page if it's still typing, else turn to the next one */
+  next() {
+    clearTimeout(this._auto);
+    if (this._state === 'typing') this._reveal(Infinity, true);
+    else if (this._state === 'wait') { sfx('blip', this); this._show(this._i + 1); }
+    else if (this._state === 'done' && this.hasAttribute('loop')) { sfx('blip', this); this.restart(); }
+  }
+  _isMenu(el) { return !!el && (el.tagName === 'MENU' || el.hasAttribute('data-choices')); }
+  _show(i, quiet) {
+    clearTimeout(this._auto);
+    const pages = this._pages || [];
+    while (this._isMenu(pages[i])) i++;
+    const el = pages[i];
+    this._menu.textContent = '';
+    if (!el) return this._finish();
+    this._i = i; this._page = el;
+    this._paintSpeaker();
+    /* a copy of the page's own markup, with every letter hidden */
+    this._txt.textContent = '';
+    for (const n of el.childNodes) this._txt.appendChild(n.cloneNode(true));
+    const w = document.createTreeWalker(this._txt, NodeFilter.SHOW_TEXT);
+    this._nodes = [];
+    for (let n = w.nextNode(); n; n = w.nextNode()) { this._nodes.push({ n, full: n.data }); n.data = ''; }
+    this._total = this._nodes.reduce((a, o) => a + o.full.length, 0);
+    this._pos = 0; this._ni = 0; this._off = 0; this._acc = 0; this._blips = 0;
+    this._state = 'typing'; this.removeAttribute('data-wait');
+    const who = el.dataset.name || this.getAttribute('name');
+    this._sr.textContent = (who ? who + ': ' : '') + el.textContent.trim().replace(/\s+/g, ' ');
+    this.setAttribute('aria-label', who ? `Dialogue with ${who}` : 'Dialogue');
+    if (!quiet) this.dispatchEvent(new CustomEvent('page', { detail: { index: i, id: el.id || null } }));
+    if (reduced() || quiet) this._reveal(Infinity, true);
+  }
+  /* uncover k more letters' worth of time; full stops and commas spend some of it waiting */
+  _reveal(k, all) {
+    while ((all || k >= 1) && this._pos < this._total) {
+      const o = this._nodes[this._ni];
+      if (this._off >= o.full.length) { this._ni++; this._off = 0; continue; }
+      if (all) { o.n.data = o.full; this._pos += o.full.length - this._off; this._off = o.full.length; continue; }
+      const ch = o.full[this._off++];
+      o.n.data = o.full.slice(0, this._off);
+      this._pos++; k -= 1 + (RPG_BEAT[ch] || 0);
+      if (/\S/.test(ch) && ++this._blips % 2 === 0) sfx('type', this, { pitch: clamp(+this.getAttribute('voice') || 1, .5, 2), gap: 0 });
+    }
+    /* a beat that ran past this tick is paid back from the next one */
+    this._acc = all ? 0 : k;
+    if (this._pos >= this._total) this._pageDone();
+  }
+  _pageDone() {
+    const el = this._page, after = this._pages[this._i + 1];
+    if (this._isMenu(after) && !el.hasAttribute('data-end')) return this._choices(after);
+    if (el.hasAttribute('data-end') || this._i >= this._pages.length - 1) return this._finish();
+    this._state = 'wait'; this.setAttribute('data-wait', '');
+    const a = this.getAttribute('auto');
+    if (a !== null) this._auto = setTimeout(() => this.next(), +a || 2500);
+  }
+  _choices(menu) {
+    this._state = 'menu'; this.removeAttribute('data-wait');
+    const opts = [...menu.querySelectorAll('button,[data-value]')];
+    const had = document.activeElement === this || this.shadowRoot.activeElement;
+    opts.forEach((o, k) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = o.textContent.trim(); b.setAttribute('part', 'choice');
+      b.addEventListener('pointerenter', () => { if (this.shadowRoot.activeElement !== b) { b.focus({ preventScroll: true }); sfx('blip', this); } });
+      b.addEventListener('click', e => {
+        e.stopPropagation(); sfx('select', this);
+        const value = o.value || o.getAttribute('data-value') || b.textContent;
+        this.dispatchEvent(new CustomEvent('choice', { detail: { value, label: b.textContent, index: k } }));
+        const go = o.getAttribute('data-goto');
+        const to = go ? this._pages.findIndex(p => p.id === go) : -1;
+        this.focus({ preventScroll: true });
+        this._show(to >= 0 ? to : this._pages.indexOf(menu) + 1);
+      });
+      this._menu.appendChild(b);
+    });
+    this._sr.textContent += ' Choices: ' + opts.map(o => o.textContent.trim()).join(', ') + '.';
+    if (had && this._menu.firstChild) this._menu.firstChild.focus({ preventScroll: true });
+  }
+  _finish() {
+    this._state = 'done'; this.removeAttribute('data-wait');
+    this.dispatchEvent(new Event('done'));
+    if (!this.hasAttribute('loop')) return;
+    this.setAttribute('data-wait', '');
+    const a = this.getAttribute('auto');
+    if (a !== null) this._auto = setTimeout(() => this.next(), +a || 2500);
+  }
+
+  /* the portrait: talks while the words type, then idles */
+  _who() { const el = this._page; return (el && el.dataset.pal) || this.getAttribute('pal') || ''; }
+  _paintSpeaker() {
+    if (!this._name) return;
+    const el = this._page;
+    this._name.textContent = (el && el.dataset.name) || this.getAttribute('name') || '';
+    const pal = this._who();
+    this._por.hidden = !pal || pal === 'none';
+    this._drawn = '';
+  }
+  _tick(dt) {
+    if (this._state === 'typing') {
+      const sp = +((this._page && this._page.dataset.speed) || this.getAttribute('speed')) || 40;
+      this._acc += dt * sp;
+      if (this._acc >= 1) this._reveal(this._acc);
+    }
+    const pal = this._who();
+    if (!pal || pal === 'none' || !SPRITES[pal]) return;
+    const sp = SPRITES[pal], talking = this._state === 'typing' && !reduced();
+    const mood = this._page && this._page.dataset.clip;
+    const clip = kitClip(pal, (talking ? [mood, 'talk', 'walk', 'idle'] : [mood, 'idle', 'blink']).filter(Boolean));
+    const fr = sp.frames[clip], fps = talking ? 8 : ((sp.fps && sp.fps[clip]) || 3);
+    if (clip !== this._clip) { this._clip = clip; this._fi = 0; this._ft = 0; }
+    this._ft += dt;
+    if (!reduced() && this._ft > 1 / fps) { this._ft = 0; this._fi = (this._fi + 1) % fr.length; }
+    const s = Math.max(1, Math.floor(70 / Math.max(sp.w, sp.h)));
+    const key = pal + clip + this._fi + '/' + s;
+    if (key === this._drawn) return;
+    this._drawn = key;
+    kitPal(this._cv, pal, clip, this._fi, s);
+    this._cv.style.width = sp.w * s + 'px'; this._cv.style.height = sp.h * s + 'px';
+    /* pals without a talking clip squash a little as they speak */
+    this._cv.style.transform = talking && !sp.frames.talk && this._fi % 2 ? 'scale(1.05,.95)' : '';
+  }
+}
+define('piix-rpg-box', PiixRpgBoxElement);
+ELEMENTS['rpg-box'] = 'piix-rpg-box';
 
 /* ---- gl/scene.js ---- */
 /* SCENE: whole illustrated places, painted on the GPU in pixels.   @component scene
