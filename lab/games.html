@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Pixel UI: games</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono&family=Silkscreen&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #f3eee3; color: #17121f; font: 400 16px/1.5 "Bricolage Grotesque", system-ui }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 28px; max-width: 1180px; margin: 0 auto }
+  .panel { padding: 24px; background: #fbf8f1; box-shadow: inset 0 0 0 2px #17121f }
+  .panel h4 { margin: 0 0 18px; font: 400 11px/1 "Silkscreen"; text-transform: uppercase; letter-spacing: .08em; opacity: .55 }
+  .wide { grid-column: 1 / -1 }
+  .breakout h2 { margin: 0 0 .3em; font-size: 44px; font-weight: 800; letter-spacing: -.03em; line-height: 1.05 }
+  .breakout p { margin: 0; font-size: 18px; color: #5a5266 }
+  #log { font: 400 12px/1.4 "JetBrains Mono"; opacity: .6 }
+</style>
+<div class="grid">
+  <div class="panel wide"><h4>Chiptune</h4>
+    <piix-chiptune></piix-chiptune>
+    <button data-sfx="coin">coin</button> <button data-sfx="jump">jump</button> <button data-sfx="powerup">powerup</button>
+    <button data-sfx="success">success</button> <button data-sfx="error">error</button> <button data-sfx="win">win</button>
+    <button data-sfx="lose">lose</button> <button data-sfx="boot">boot</button> <button data-sfx="break">break</button>
+    <a href="#x" data-sfx-hover="blip">hover me</a></div>
+  <div class="panel wide breakout"><h4>Breakout</h4>
+    <piix-breakout id="bo" pal="bitbug">
+      <h2>Break every word in this heading</h2>
+      <p>And this paragraph too, <b data-solid>if</b> you can. Steel words never break.</p>
+    </piix-breakout></div>
+  <div class="panel"><h4>RPG box</h4>
+    <piix-rpg-box id="rb" pal="kitty" name="Kit">
+      <p>Oh! A visitor. Nobody comes down here anymore.</p>
+      <p>Want to see what I've been <b>building</b>?</p>
+      <menu>
+        <button value="yes" data-goto="tour">Show me!</button>
+        <button value="no">Maybe later</button>
+      </menu>
+      <p data-end>Alright. I'll be here, typing.</p>
+      <p id="tour" data-clip="hop">Follow me! It's <b>124 pals</b> deep.</p>
+    </piix-rpg-box>
+    <br>
+    <piix-rpg-box theme="paper" pal="bitbug" name="Bitbug" speed="30" loop auto="1800">
+      <p>I crawl on headings for a living.</p>
+      <p data-name="Kit" data-pal="kitty">And I nap on paragraphs.</p>
+    </piix-rpg-box>
+  </div>
+  <div class="panel"><h4>Handheld</h4>
+    <piix-handheld id="hh">
+      <h3 style="margin:0 0 .4em">SAVE FILE 1</h3>
+      <p>Real HTML, shown in four shades of green.</p>
+      <p><a href="#a">Continue</a><br><a href="#b">New game</a><br><a href="#c">Options</a></p>
+      <img src="../site/launch-poster.jpg" alt="" style="width:100%">
+      <p>Scroll with the D-pad. Links still work. Press SELECT to change the screen.</p>
+    </piix-handheld>
+    <piix-handheld color="lime" screen="grape" width="240px" boot="off"><p>Lime shell, grape screen.</p><a href="#d">A link</a></piix-handheld>
+  </div>
+  <div class="panel wide"><div id="log"></div></div>
+</div>
+<script src="../piixpal.js"></script>
+<script>
+  const log = t => { const d = document.getElementById('log'); d.textContent = t + '\n' + d.textContent.slice(0, 400); };
+  ['start', 'brick', 'win', 'lose'].forEach(n => bo.addEventListener(n, e => log('breakout ' + n + ' ' + JSON.stringify(e.detail || {}))));
+  ['page', 'choice', 'done'].forEach(n => rb.addEventListener(n, e => log('rpg ' + n + ' ' + JSON.stringify(e.detail || {}))));
+  hh.addEventListener('press', e => log('handheld press ' + e.detail.button));
+</script>
